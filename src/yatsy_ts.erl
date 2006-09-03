@@ -4,26 +4,29 @@
 %%%-------------------------------------------------------------------
 -module(yatsy_ts).
 
-
 -behaviour(gen_server).
 
 %% API
--export([start/0, start_link/0,
-	 setup/0, foreach_tc/2,
+-export([start/0, start_link/0, start/1, start_link/1,
+	 setup/1, foreach_tc/2,
 	 run/0, clean/0, clean_and_run/0,
-	 suite_tc_reply/2,
-	 suite_doc_reply/2,
-	 tc_run_reply/2,
-	 fail/0, fail/1
+	 suite_tc_reply/1,
+	 suite_doc_reply/1,
+	 tc_run_reply/1,
+	 fail/0, fail/1,
+	 print_state/0
 	]).
 
-
+-export([test/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
 
 -include("../include/yatsy.hrl").
+
+-define(ilog(X,Y), error_logger:info_msg("*ilog ~p:~p: " X,
+					 [?MODULE, ?LINE | Y])).
 
 -define(SERVER, ?MODULE).
 -define(DEFAULT_CONF, [{cback_mod, ?MODULE}]).
@@ -42,6 +45,12 @@
 	  queue = []                  % list of #app{}
 	 }).
 
+
+test() -> 
+    start([{yaws_top_dir, "/home/tobbe/Kreditor/kred/lib"}]).
+
+
+
 %%====================================================================
 %% API
 %%====================================================================
@@ -50,10 +59,16 @@
 %% Description: Starts the server
 %%--------------------------------------------------------------------
 start() ->
-    gen_server:start({local, ?SERVER}, ?MODULE, [], []).
+    start([]).
+
+start(Config) when list(Config) ->
+    gen_server:start({local, ?SERVER}, ?MODULE, Config, []).
 
 start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+    start_link([]).
+
+start_link(Config) when list(Config) ->
+    gen_server:start_link({local, ?SERVER}, ?MODULE, Config, []).
 
 run() ->
     gen_server:call(?SERVER, run, infinity).
@@ -67,14 +82,19 @@ clean_and_run() ->
 	Else -> Else
     end.
 
+print_state() ->
+    gen_server:cast(?SERVER, print_state).
 
-suite_tc_reply(Pid, Res) ->
+
+
+
+suite_tc_reply(Res) ->
     gen_server:cast(?SERVER, {suite_tc_reply, self(), Res}).
 
-suite_doc_reply(Pid, Res) ->
+suite_doc_reply(Res) ->
     gen_server:cast(?SERVER, {suite_doc_reply, self(), Res}).
 
-tc_run_reply(Pid, Res) ->
+tc_run_reply(Res) ->
     gen_server:cast(?SERVER, {tc_run_reply, self(), Res}).
 
 
@@ -90,13 +110,14 @@ tc_run_reply(Pid, Res) ->
 %%                         {stop, Reason}
 %% Description: Initiates the server
 %%--------------------------------------------------------------------
-init([]) ->
-    State = setup(),
+init(Config) when list(Config) ->
+    State = setup(Config ++ ?DEFAULT_CONF),
     {ok, State}.
 
-setup() ->
-    TopDir = get_top_dir(),
+setup(Config) ->
+    TopDir = get_top_dir(Config),
     #s{top_dir = TopDir,
+       config  = Config,
        queue   = get_apps(TopDir)
       }.
 
@@ -115,7 +136,7 @@ handle_call(run, _From, State) when State#s.status == ?YATSY_RUNNING ->
     {reply, {error, "already running"}, State};
 %%
 handle_call(clean, _From, State) when State#s.status == ?YATSY_IDLE ->
-    {reply, ok, setup()};
+    {reply, ok, setup(State#s.config)};
 handle_call(clean, _From, State) when State#s.status == ?YATSY_RUNNING ->
     {reply, {error, "already running"}, State};
 %%
@@ -130,22 +151,26 @@ handle_call(_Request, _From, State) ->
 %% Description: Handling cast messages
 %%--------------------------------------------------------------------
 handle_cast({tc_run_reply, Pid, Res}, #s{pid = Pid} = State) ->
-    wlog("+++++++ got tc_run_reply, Res=~p~n", [Res]),
+    ?ilog("+++++++ got tc_run_reply, Res=~p~n", [Res]),
     cancel_timer(State),
     {noreply, exec_tc(set_tc_rc(State#s{timer_ref = false}, Res))};
 %%
 handle_cast({suite_doc_reply, Pid, Res}, #s{pid = Pid} = State) ->
-    wlog("+++++++ got suite_doc_reply, Res=~p~n", [Res]),
+    ?ilog("+++++++ got suite_doc_reply, Res=~p~n", [Res]),
     cancel_timer(State),
     {noreply, exec_tc(set_suite_doc(State#s{timer_ref = false}, Res))};
 %%
 handle_cast({suite_tc_reply, Pid, Res}, #s{pid = Pid} = State) ->
-    wlog("+++++++ got suite_tc_reply, Res=~p~n", [Res]),
+    ?ilog("+++++++ got suite_tc_reply, Res=~p~n", [Res]),
     cancel_timer(State),
     {noreply, exec_tc(set_suite_tc(State#s{timer_ref = false}, Res))};
 %%
+handle_cast(print_state, State) ->
+    io:format("~n~p~n", [State]),
+    {noreply, State};
+%%
 handle_cast(_Msg, State) ->
-    wlog("+++++++ handle_cast got: ~p~n", [_Msg]),
+    ?ilog("+++++++ handle_cast got: ~p~n", [_Msg]),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -155,15 +180,15 @@ handle_cast(_Msg, State) ->
 %% Description: Handling all non call/cast messages
 %%--------------------------------------------------------------------
 handle_info({timeout_suite_doc, Pid}, #s{pid = Pid} = State) ->
-    wlog("+++++++ timeout_suite_doc~n", []),
+    ?ilog("+++++++ timeout_suite_doc~n", []),
     {noreply, exec_tc(set_suite_doc(State, ?EMSG_FAILED_SUITE_DOC))};
 %%
 handle_info({timeout_suite_tc, Pid}, #s{pid = Pid} = State) ->
-    wlog("+++++++ timeout_suite_tc~n", []),
+    ?ilog("+++++++ timeout_suite_tc~n", []),
     {noreply, exec_tc(set_suite_tc(State, []))};
 %%
 handle_info(_Info, State) ->
-    wlog("+++++++ handle_info got: ~p~n", [_Info]),
+    ?ilog("+++++++ handle_info got: ~p~n", [_Info]),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -212,39 +237,40 @@ set_tc_rc(#s{current = A} = S, ok) ->
 set_tc_rc(#s{current = A} = S, Else) ->
     Suite = A#app.current,
     TC = Suite#suite.current,
-    NewTC = TC#tc{rc = ok, error = lists:flatten(io_lib:format("~p", [Else]))},
+    NewTC = TC#tc{rc = error, error = lists:flatten(io_lib:format("~p", [Else]))},
     S#s{current = A#app{current = Suite#suite{current = NewTC}}}.
 
 
 %%%
 %%% The Test Server Engine
 %%%
-exec_tc(State) when State#s.queue == [] ->
-    State#s{status = ?YATSY_IDLE};                   % nothing to do...
 exec_tc(State) ->
-    wlog("+++++++ ~p~n", [State#s.current]),
+    ?ilog("+++++++ State=~p~n", [State]),
     case next_tc(State) of
 	{true, NewState} -> run_tc(NewState#s{status = ?YATSY_RUNNING});
 	false            -> State#s{status = ?YATSY_IDLE}
     end.
 
 
+%%
 run_tc(#s{remote_node = N, current = #app{current = #suite{doc = false}}} = S) -> 
     %% Must be first time we enter this suite, so we start off by
     %% retrieving the suite doc string.
-    wlog("+++++++ Suite=~p, doc=false~n", [suite_name(S)]),
+    ?ilog("+++++++ Suite=~p, doc=false~n", [suite_name(S)]),
     Pid =  yatsy_tc:suite_doc(N, suite_name(S)),
     {ok, Tref} = timer:send_after(?DEFAULT_TIMEOUT, {timeout_suite_doc, Pid}),
     S#s{pid = Pid, timer_ref = Tref};
+%%
 run_tc(#s{remote_node = N, current = #app{current = #suite{queue = false}}} = S) -> 
     %% Must be second time we enter this suite, so we continue by
     %% retrieving the Test Case names of the suite.
-    wlog("+++++++ Suite=~p, queue=false~n", [suite_name(S)]),
+    ?ilog("+++++++ Suite=~p, queue=false~n", [suite_name(S)]),
     Pid =  yatsy_tc:suite_tc(N, suite_name(S)),
     {ok, Tref} = timer:send_after(?DEFAULT_TIMEOUT, {timeout_suite_tc, Pid}),
     S#s{pid = Pid, timer_ref = Tref};
 run_tc(S) -> 
     %% Execute a Test Case in the suite.
+    ?ilog("+++++++ TC=~p~n", [state2tc(S)]),
     run_tc(S, state2tc(S)).
 
 run_tc(S, {true, TC}) -> start_tc(S, TC);
@@ -310,6 +336,8 @@ next_tc(#app{finished = F, current = C, queue = []} = X) ->
 	false        -> next_tc(X#app{finished = [C|F], current = false})
     end;
 %%%
+next_tc(#suite{queue = false} = X) -> % no test cases retrieved yet
+    {true, X};
 next_tc(#suite{current = false, queue = []}) -> 
     false;
 next_tc(#suite{current = false, queue = [H|T]} = X) -> 
@@ -321,53 +349,61 @@ next_tc(#suite{finished = F, current = C, queue = []} = X) ->
 
 
 
-get_top_dir() -> "/home/tobbe/Kreditor/kred/lib".   % FIXME read an env.var etc...
-
-
-get_apps(TopDir) ->                                 % FIXME
-    App = "site",
-    [#app{name  = App,
-	  queue = get_suites(App)},
-     #app{name  = App++"_2",               % FIXME
-	  queue = get_suites(App)}
-    ].
-
-get_suites(App) -> 
-    M = "estore_SUITE",                             % FIXME
-    Path = get_top_dir() ++ "/site/ebin",           % FIXME
-    code:add_path(Path),                            % FIXME
-    [#suite{name  = M,
-	    path  = get_top_dir() ++ "/site/ebin",  % FIXME hard coded for now
-	    queue = get_tcs(M)},
-     #suite{name  = M,                              % FIXME
-	    path  = get_top_dir() ++ "/site/ebin",  % FIXME hard coded for now
-	    queue = get_tcs(M)}
-    ].
-
-
-get_tcs(Mod) ->
-    [#tc{name = Name} || Name <- safe_all(Mod)].
-
-safe_all(Mod) ->
-    case catch apply(l2a(Mod), all, [suite]) of
-	L when list(L) -> L;
-	_              -> 
-	    elog("Failed to retrieve any test cases from: ~p~n", [Mod]),
-	    []
+get_top_dir(Config) -> 
+    case config(yaws_top_dir, Config) of
+	{ok, Dir} -> Dir;
+	_ ->
+	    case os:getenv("YATSY_TOP_DIR") of
+		false -> ".";   % fallback
+		Dir   -> Dir
+	    end
     end.
 
+get_apps(TopDir) -> 
+    Paths = filter_code_path(TopDir),
+    F = fun(P, Acc) ->
+		case get_app(P) of
+		    {ok, A} -> [A|Acc];
+		    _       -> Acc
+		end
+	end,
+    lists:foldr(F, [], Paths).
+
+filter_code_path(TopDir) ->
+    Len = length(TopDir),
+    F = fun(Path, Acc) -> 
+		case regexp:match(Path, TopDir) of
+		    {match, 1, Len} -> [Path | Acc];
+		    _ -> Acc
+		end
+	end,
+    lists:foldr(F, [], code:get_path()).
 
 
+get_app(Path) ->
+    case lists:reverse(string:tokens(Path, "/")) of
+	["ebin", App | _] ->
+	    case get_suites(Path) of
+		false  -> false;
+		Suites ->
+		    {ok, #app{name  = App,
+			      queue = Suites}}
+	    end;
+	_ ->
+	    false
+    end.
 
-%%% FIXME should send a message to ourselves
-%%%       to be logged in a "system log"
-elog(Fstr, Args) -> 
-    io:format("<ee>: "++Fstr, Args),   % error
-    fixme.
+get_suites(Path) ->
+    case filelib:wildcard(Path++"/*_SUITE.beam") of
+	[] -> false;
+	L  ->
+	    [#suite{name  = filename:basename(X, ".beam"),
+		    path  =  Path,
+		    queue = false} || 
+		X <- L]
+    end.
+			
 
-wlog(Fstr, Args) ->
-    io:format("<ww>: "++Fstr, Args),   % warning
-    fixme.
 
 
 fail(Reason) ->
@@ -379,4 +415,12 @@ fail() ->
 
 l2a(L) when list(L) -> list_to_atom(L);
 l2a(A) when atom(A) -> A.
+
+config(Key, L) when list(L) ->
+    case lists:keysearch(Key, 1, L) of
+	{value, {_,Value}} -> {ok, Value};
+	_                  -> {error, "config: not found"}
+    end.
+	
+
 
