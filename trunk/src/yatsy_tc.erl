@@ -19,12 +19,20 @@ suite_tc(Node, Mod) ->
     Self = self(),
     spawn(fun() -> do_suite_tc(Self, Node, Mod, all, [suite]) end).
 
-do_suite_tc(Pid, Node, Mod, Fun, Args) ->
+do_suite_tc(_Pid, Node, Mod, Fun, Args) ->
     case call(Node, Mod, Fun, Args) of
-	TCs when list(TCs) -> yatsy_ts:suite_tc_reply(Pid, {ok, TCs});
-	Else               -> yatsy_ts:suite_tc_reply(Pid, {error, Else})
+	Ts when list(Ts) -> 
+	    Res = [get_tc_doc(Node, Mod, #tc{name = Tname}) || Tname <- Ts],
+	    yatsy_ts:suite_tc_reply({ok, Res});
+	Else -> 
+	    yatsy_ts:suite_tc_reply({error, Else})
     end.
     
+get_tc_doc(Node, Mod, #tc{name = Tname} = TC) ->
+    case call(Node, Mod, Tname, [doc]) of
+	Doc when list(Doc) -> TC#tc{doc = Doc};
+	_                  -> TC   % ignore the doc string
+    end.
 
 %%%
 %%% Get the documentation for this suite.
@@ -33,10 +41,10 @@ suite_doc(Node, Mod) ->
     Self = self(),
     spawn(fun() -> do_suite_doc(Self, Node, Mod, all, [doc]) end).
 
-do_suite_doc(Pid, Node, Mod, Fun, Args) ->
+do_suite_doc(_Pid, Node, Mod, Fun, Args) ->
     case call(Node, Mod, Fun, Args) of
-	[Str] when list(Str) -> yatsy_ts:suite_doc_reply(Pid, {ok, Str});
-	Else                 -> yatsy_ts:suite_doc_reply(Pid, {error, Else})
+	[Str] when list(Str) -> yatsy_ts:suite_doc_reply({ok, Str});
+	Else                 -> yatsy_ts:suite_doc_reply({error, Else})
     end.
     
 
@@ -48,19 +56,19 @@ run(Node, Mod, TC, Config) ->
     spawn(fun() -> do_run(Self, Node, Mod, TC, Config) end).
 
 
-do_run(Pid, Node, Mod, #tc{name = Fun}, Config) ->
+do_run(_Pid, Node, Mod, #tc{name = Fun}, Config) ->
     case call(Node, Mod, init_per_testcase, [Fun, Config]) of
 	NewConfig when list(NewConfig) ->
 	    case call(Node, Mod, Fun, [NewConfig]) of
-		ok   -> 
+		true -> 
 		    call(Node, Mod, fin_per_testcase, [Fun, NewConfig]),
-		    yatsy_ts:tc_run_reply(Pid, ok);
+		    yatsy_ts:tc_run_reply(ok);
 		Else -> 
 		    call(Node, Mod, fin_per_testcase, [Fun, NewConfig]),
-		    yatsy_ts:tc_run_reply(Pid, {error, Else})
+		    yatsy_ts:tc_run_reply({error, Else})
 	    end;
 	Else ->
-	    yatsy_ts:tc_run_reply(Pid, {error, Else})
+	    yatsy_ts:tc_run_reply({error, Else})
     end.
     
 
