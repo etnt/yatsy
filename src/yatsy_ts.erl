@@ -30,6 +30,12 @@
 -define(ilog(X,Y), error_logger:info_msg("*ilog ~p:~p: " X,
 					 [?MODULE, ?LINE | Y])).
 
+-ifdef(debug).
+-define(dlog(X,Y), ?ilog(X,Y)).
+-else.
+-define(dlog(X,Y), true).
+-endif.
+
 -define(SERVER, ?MODULE).
 -define(DEFAULT_CONF, [{cback_mod, ?MODULE}]).
 
@@ -207,17 +213,17 @@ handle_call(_Request, _From, State) ->
 %% Description: Handling cast messages
 %%--------------------------------------------------------------------
 handle_cast({tc_run_reply, Pid, Res}, #s{pid = Pid} = State) ->
-    ?ilog("+++++++ got tc_run_reply, Res=~p~n", [Res]),
+    ?dlog(" got tc_run_reply, Res=~p~n", [Res]),
     cancel_timer(State),
     {noreply, exec_tc(set_tc_rc(State#s{timer_ref = false}, Res))};
 %%
 handle_cast({suite_doc_reply, Pid, Res}, #s{pid = Pid} = State) ->
-    ?ilog("+++++++ got suite_doc_reply, Res=~p~n", [Res]),
+    ?dlog("got suite_doc_reply, Res=~p~n", [Res]),
     cancel_timer(State),
     {noreply, exec_tc(set_suite_doc(State#s{timer_ref = false}, Res))};
 %%
 handle_cast({suite_tc_reply, Pid, Res}, #s{pid = Pid} = State) ->
-    ?ilog("+++++++ got suite_tc_reply, Res=~p~n", [Res]),
+    ?dlog("got suite_tc_reply, Res=~p~n", [Res]),
     cancel_timer(State),
     {noreply, exec_tc(set_suite_tc(State#s{timer_ref = false}, Res))};
 %%
@@ -226,7 +232,7 @@ handle_cast(print_state, State) ->
     {noreply, State};
 %%
 handle_cast(_Msg, State) ->
-    ?ilog("+++++++ handle_cast got: ~p~n", [_Msg]),
+    ?ilog("handle_cast got: ~p~n", [_Msg]),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -236,15 +242,15 @@ handle_cast(_Msg, State) ->
 %% Description: Handling all non call/cast messages
 %%--------------------------------------------------------------------
 handle_info({timeout_suite_doc, Pid}, #s{pid = Pid} = State) ->
-    ?ilog("+++++++ timeout_suite_doc~n", []),
+    ?dlog("timeout_suite_doc~n", []),
     {noreply, exec_tc(set_suite_doc(State, ?EMSG_FAILED_SUITE_DOC))};
 %%
 handle_info({timeout_suite_tc, Pid}, #s{pid = Pid} = State) ->
-    ?ilog("+++++++ timeout_suite_tc~n", []),
+    ?dlog("timeout_suite_tc~n", []),
     {noreply, exec_tc(set_suite_tc(State, []))};
 %%
 handle_info(_Info, State) ->
-    ?ilog("+++++++ handle_info got: ~p~n", [_Info]),
+    ?ilog("handle_info got: ~p~n", [_Info]),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -303,7 +309,7 @@ set_tc_rc(#s{current = A} = S, Else) ->
 %%% The Test Server Engine
 %%%
 exec_tc(State) ->
-    ?ilog("+++++++ State=~p~n", [State]),
+    ?dlog("State=~p~n", [State]),
     case next_tc(State) of
 	{true, NewState} -> run_tc(NewState#s{status = ?YATSY_RUNNING});
 	false            -> State#s{status = ?YATSY_IDLE}
@@ -314,7 +320,6 @@ exec_tc(State) ->
 run_tc(#s{remote_node = N, current = #app{current = #suite{doc = false}}} = S) -> 
     %% Must be first time we enter this suite, so we start off by
     %% retrieving the suite doc string.
-    ?ilog("+++++++ Suite=~p, doc=false~n", [suite_name(S)]),
     Pid =  yatsy_tc:suite_doc_and_load(N, suite_name(S)),
     {ok, Tref} = timer:send_after(?DEFAULT_TIMEOUT, {timeout_suite_doc, Pid}),
     S#s{pid = Pid, timer_ref = Tref};
@@ -322,13 +327,11 @@ run_tc(#s{remote_node = N, current = #app{current = #suite{doc = false}}} = S) -
 run_tc(#s{remote_node = N, current = #app{current = #suite{queue = false}}} = S) -> 
     %% Must be second time we enter this suite, so we continue by
     %% retrieving the Test Case names of the suite.
-    ?ilog("+++++++ Suite=~p, queue=false~n", [suite_name(S)]),
     Pid =  yatsy_tc:suite_tc(N, suite_name(S)),
     {ok, Tref} = timer:send_after(?DEFAULT_TIMEOUT, {timeout_suite_tc, Pid}),
     S#s{pid = Pid, timer_ref = Tref};
 run_tc(S) -> 
     %% Execute a Test Case in the suite.
-    ?ilog("+++++++ TC=~p~n", [state2tc(S)]),
     run_tc(S, state2tc(S)).
 
 run_tc(S, {true, TC}) -> start_tc(S, TC);
