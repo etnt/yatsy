@@ -18,9 +18,10 @@
 start() ->
     setup_embedded_yaws(),
     application:start(yaws),
+    {ok, Host} = inet:gethostname(),
     GC = yaws_config:make_default_gconf(false, ""),
     SC = #sconf{port = 8888,
-		servername = "localhost",
+		servername = Host,
 		listen = {0,0,0,0},
 		docroot = ?DOCROOT},
     yaws_api:setconf(GC, [[SC]]).

@@ -6,7 +6,7 @@
 
 -export([start/0, start_link/0, start/1, start_link/1,
 	 run/0, clean/0, clean_and_run/0,
-	 top/1
+	 top/1, app/2, suite/3
 	 ]).
 
 -export([test/0]).
@@ -42,5 +42,11 @@ clean_and_run() ->
 
 top(Url) ->
     yatsy_rg:top(Url).
+
+app(Url, App) ->
+    yatsy_rg:app(Url, App).
+
+suite(Url, App, Suite) ->
+    yatsy_rg:suite(Url, App, Suite).
 
 
