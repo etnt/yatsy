@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% Created : 1 Sep 2006 by Torbjorn Tornkvist <tobbe@tornkvist.org>
-%%% Descr.  : (yatsy) Yet Another Test Server - Yaws compatible 
+%%% Descr.  : The Yatsy test server.
 %%%-------------------------------------------------------------------
 -module(yatsy_ts).
 
@@ -14,7 +14,8 @@
 	 suite_doc_reply/1,
 	 tc_run_reply/1,
 	 fail/0, fail/1,
-	 print_state/0,
+	 print_state/0, next_tc/0,
+	 get_finished/0,
 
 	 l2a/1, a2l/1
 	]).
@@ -91,8 +92,16 @@ clean_and_run() ->
 	Else -> Else
     end.
 
+get_finished() ->
+    gen_server:call(?SERVER, get_finished, infinity).
+
+next_tc() ->
+    gen_server:call(?SERVER, next_tc, infinity).
+
+
 print_state() ->
     gen_server:cast(?SERVER, print_state).
+
 
 
 
@@ -202,6 +211,13 @@ handle_call(clean, _From, State) when State#s.status == ?YATSY_IDLE ->
 handle_call(clean, _From, State) when State#s.status == ?YATSY_RUNNING ->
     {reply, {error, "already running"}, State};
 %%
+handle_call(get_finished, _From, State) ->
+    {reply, {ok, State#s.finished}, State};
+%%
+handle_call(next_tc, _From, State) ->
+    io:format("~n~p~n", [State]),
+    {reply, next_tc(State), State};
+%%
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -215,7 +231,10 @@ handle_call(_Request, _From, State) ->
 handle_cast({tc_run_reply, Pid, Res}, #s{pid = Pid} = State) ->
     ?dlog(" got tc_run_reply, Res=~p~n", [Res]),
     cancel_timer(State),
-    {noreply, exec_tc(set_tc_rc(State#s{timer_ref = false}, Res))};
+    NewState = exec_tc(set_tc_rc(State#s{timer_ref = false}, Res)),
+    ?ilog(" got tc_run_reply, Res=~p, ~n  NewState=~p~n", [Res,NewState]),
+    %%{noreply, exec_tc(set_tc_rc(State#s{timer_ref = false}, Res))};
+    {noreply, NewState};
 %%
 handle_cast({suite_doc_reply, Pid, Res}, #s{pid = Pid} = State) ->
     ?dlog("got suite_doc_reply, Res=~p~n", [Res]),
@@ -334,8 +353,9 @@ run_tc(S) ->
     %% Execute a Test Case in the suite.
     run_tc(S, state2tc(S)).
 
-run_tc(S, {true, TC}) -> start_tc(S, TC);
-run_tc(S, _)          -> S#s{status = ?YATSY_ERROR, error = ?EMSG_NO_TC}.
+run_tc(S, {true, false}) -> exec_tc(S);      % go to next Test Case
+run_tc(S, {true, TC})    -> start_tc(S, TC);
+run_tc(S, _)             -> S#s{status = ?YATSY_ERROR, error = ?EMSG_NO_TC}.
 
 %%%
 %%% Start running a Test Case. The Timeout is optional.
@@ -353,7 +373,7 @@ suite_name(#s{current = #app{current = #suite{name = Name}}}) -> Name.
 
 
 state2tc(#s{current = #app{current = #suite{current = TC}}}) -> {true, TC};
-state2tc(_)                                                  -> false.
+state2tc(_)                                                  -> {true, false}.
 
 %%%
 %%%  yatsy_ts:foreach_tc(fun(X) -> io:format("~p~n", [X]) end, yatsy_ts:setup()).
@@ -379,7 +399,7 @@ next_tc(#s{finished = F, current = C, queue = [H|T]} = X) ->
 next_tc(#s{finished = F, current = C, queue = []} = X) -> 
     case next_tc(C) of
 	{true, NewC} -> {true, X#s{current = NewC}};
-	false        -> next_tc(X#s{finished = [C|F], current = false})
+	false        -> {true, X#s{finished = [C|F], current = false}}
     end;
 %%%
 next_tc(#app{current = false, queue = []}) -> 
@@ -394,7 +414,7 @@ next_tc(#app{finished = F, current = C, queue = [H|T]} = X) ->
 next_tc(#app{finished = F, current = C, queue = []} = X) -> 
     case next_tc(C) of
 	{true, NewC} -> {true, X#app{current = NewC}};
-	false        -> next_tc(X#app{finished = [C|F], current = false})
+	false        -> {true, X#app{finished = [C|F], current = false}}
     end;
 %%%
 next_tc(#suite{queue = false} = X) -> % no test cases retrieved yet
@@ -406,7 +426,7 @@ next_tc(#suite{current = false, queue = [H|T]} = X) ->
 next_tc(#suite{finished = F, current = C, queue = [H|T]} = X) -> 
     {true, X#suite{finished =[C|F], current = H, queue = T}};
 next_tc(#suite{finished = F, current = C, queue = []} = X) -> 
-    next_tc(X#suite{finished =[C|F], current = false}).
+    {true, X#suite{finished =[C|F], current = false}}.
 
 
 
