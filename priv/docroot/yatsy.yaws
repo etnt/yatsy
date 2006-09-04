@@ -11,27 +11,31 @@ out(A) ->
 
 dispatch(undefined, undefined, undefined) ->
     {ehtml,
-     [{h1, [], "The Application Page"},
-      yatsy:top("yatsy.yaws")]};
+     html([{h1, [], "The Application Page"},
+	   yatsy:top("yatsy.yaws")])};
 %%
 dispatch({ok,App}, undefined, undefined) ->
     {ehtml,
-     [{h1, [], "Test Suites in application: "++App},
-      yatsy:top("yatsy.yaws?app="++App)]};
+     html([{h1, [], "Test Suites in application: "++App},
+	   yatsy:app("yatsy.yaws?app="++App, App)])};
 %%
 dispatch({ok,App}, {ok, Suite}, undefined) ->
     {ehtml,
-     [{h1, [], "Test Cases in test suite: "++Suite},
-      yatsy:top("yatsy.yaws?app="++App++"&suite="++Suite)]};
+     html([{h1, [], "Test Cases in test suite: "++Suite},
+	   yatsy:suite("yatsy.yaws?app="++App++"&suite="++Suite, App, Suite)])};
 %%
 dispatch({ok,App}, {ok, Suite}, {ok, TC}) ->
     {ehtml,
-     [{h1, [], "Test Case: "++TC},
-      yatsy:top("yatsy.yaws?app="++App++"&suite="++Suite++"&tc="++TC)]};
+     html([{h1, [], "Test Case: "++TC},
+	   yatsy:top("yatsy.yaws?app="++App++"&suite="++Suite++"&tc="++TC)])};
 %%
 dispatch(_, _, _) ->
     {ehtml,
-     [{p, [], "ERROR: Wrong query argument input!"}]}.
+     html([{p, [], "ERROR: Wrong query argument input!"}])}.
 
+html(Body) ->
+    [{html, [],
+      [{head, [],[]},
+       {body, [], Body}]}].
 
 </erl>
