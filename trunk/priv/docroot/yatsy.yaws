@@ -21,13 +21,14 @@ dispatch({ok,App}, undefined, undefined) ->
 %%
 dispatch({ok,App}, {ok, Suite}, undefined) ->
     {ehtml,
-     html([{h1, [], "Test Cases in test suite: "++Suite},
+     html([{h1, [], "Test Cases in test suite: "++App++"/"++Suite},
 	   yatsy:suite("yatsy.yaws?app="++App++"&suite="++Suite, App, Suite)])};
 %%
 dispatch({ok,App}, {ok, Suite}, {ok, TC}) ->
     {ehtml,
-     html([{h1, [], "Test Case: "++TC},
-	   yatsy:top("yatsy.yaws?app="++App++"&suite="++Suite++"&tc="++TC)])};
+     html([{h1, [], "Test Case: "++App++"/"++Suite++"/"++TC},
+	   yatsy:tc("yatsy.yaws?app="++App++"&suite="++Suite++"&tc="++TC, 
+		    App, Suite, TC)])};
 %%
 dispatch(_, _, _) ->
     {ehtml,
@@ -35,7 +36,18 @@ dispatch(_, _, _) ->
 
 html(Body) ->
     [{html, [],
-      [{head, [],[]},
-       {body, [], Body}]}].
+      [{head, [],
+	[style()]},
+       {body, [], 
+	{'div', [{id, "yatsy_output"}], Body}}]}].
+
+style() ->
+    {style, [],
+     ["#yatsy_output {margin-left: 20px; margin-top: 40px}\n"
+      "#yatsy_output table {border-collapse: collapse}\n"
+      "#yatsy_output td {border: 1px solid black; padding: 3px 6px 3px 6px}\n"
+      "#yatsy_output th {border: 1px solid black; text-align: left; padding: 3px 6px 3px 6px}\n"
+      "#yatsy_output h1 {font-size: x-large; padding-bottom: 10px}\n"
+      ]}.
 
 </erl>

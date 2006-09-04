@@ -8,14 +8,14 @@
 
 %% API
 -export([start/0, start_link/0,
-	 top/1, app/2, suite/3
+	 top/1, app/2, suite/3, tc/4
 	]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
 
--import(yatsy_ts, [a2l/1]).
+-import(yatsy_ts, [a2l/1, l2a/1]).
 
 -include("yatsy_ts.hrl").
 
@@ -45,6 +45,9 @@ app(Url, App) ->
 
 suite(Url, App, Suite) ->
     gen_server:call(?SERVER, {suite, Url, App, Suite}, infinity).
+
+tc(Url, App, Suite, Tc) ->
+    gen_server:call(?SERVER, {tc, Url, App, Suite, l2a(Tc)}, infinity).
 
 %%====================================================================
 %% gen_server callbacks
@@ -80,6 +83,10 @@ handle_call({app, Url, App}, _From, State) ->
 handle_call({suite, Url, App, Suite}, _From, State) ->
     {ok, Finished} = yatsy_ts:get_finished(),
     {reply, do_suite(Url, App, Suite, Finished), State};
+%%
+handle_call({tc, Url, App, Suite, Tc}, _From, State) ->
+    {ok, Finished} = yatsy_ts:get_finished(),
+    {reply, do_tc(Url, App, Suite, Tc, Finished), State};
 %%
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -162,6 +169,33 @@ do_suite(Url, App, Suite, Apps) ->
 	     "no application found"}
     end.
 
+do_tc(_Url, App, Suite, Tc, Apps) ->
+    case get_app(App, Apps) of
+	{ok, A} ->
+	    case get_suite(Suite, A#app.finished) of
+		{ok, S} ->
+		    Res = case get_tc(Tc, S#suite.finished) of
+			      {ok, #tc{rc = ok} = T} ->
+				  ["(Description: ", {i, [], T#tc.doc}, ")",
+				   {br, []},
+				   "ok"];
+			      {ok, #tc{rc = error} = T} ->
+				  ["(Description: ", {i, [], T#tc.doc}, ")",
+				   {br, []},
+				   lists:flatten(io_lib:format("~p", [T#tc.error]))];
+			      _ -> 
+				  "no test case found"
+			  end,
+		    {'div', [{id, "yatsy_tc"}], [{p, [], Res}]};
+		_ ->
+		    {'div', [{id, "yatsy_error"}],
+		     "no suite found"}
+	    end;
+	_ ->
+	    {'div', [{id, "yatsy_error"}],
+	     "no application found"}
+    end.
+
 
 get_app(App, [#app{name = App} = H|_]) -> {ok, H};
 get_app(App, [_|T])                    -> get_app(App, T);
@@ -170,6 +204,10 @@ get_app(_, [])                         -> {error, "not found"}.
 get_suite(Suite, [#suite{name = Suite} = H|_]) -> {ok, H};
 get_suite(Suite, [_|T])                        -> get_suite(Suite, T);
 get_suite(_, [])                               -> {error, "not found"}.
+
+get_tc(Tc, [#tc{name = Tc} = H|_]) -> {ok, H};
+get_tc(Tc, [_|T])                  -> get_tc(Tc, T);
+get_tc(_, [])                      -> {error, "not found"}.
 
 
 mk_link(Url, Key, Aname) ->
