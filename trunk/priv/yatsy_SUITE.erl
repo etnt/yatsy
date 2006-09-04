@@ -1,16 +1,14 @@
 %%%-------------------------------------------------------------------
 %%% File    : yatsy_SUITE.erl
-%%% Author  : Torbjorn Tornkvist <tobbe@sej.hq.kred>
-%%% Description : 
-%%%
-%%% Created :  2 Sep 2006 by Torbjorn Tornkvist <tobbe@sej.hq.kred>
+%%% Created :  2 Sep 2006 by Torbjorn Tornkvist <tobbe@tornkvist.org>
+%%% Descr.  : Example of a SUITE file. 
 %%%-------------------------------------------------------------------
 -module(yatsy_SUITE).
 
 %% Note: This directive should only be used in test suites.
 -compile(export_all).
 
--include("test_server.hrl").
+-include("yatsy.hrl").
 
 %% Test server callback functions
 %%--------------------------------------------------------------------
@@ -73,15 +71,18 @@ all(doc) ->
     ["Describe the main purpose of this suite"];
 
 all(suite) -> 
-    [].
+    [test_case_1, test_case_2].
 
 %% Test cases starts here.
 %%--------------------------------------------------------------------
-test_case(doc) -> 
+test_case_1(doc) -> 
     ["Describe the main purpose of test case"];
+test_case_1(Config) when is_list(Config) -> 
+    ?line 3 = 3,
+    true.
 
-test_case(suite) -> 
-    [];
-
-test_case(Config) when is_list(Config) -> 
-    ok.
+test_case_2(doc) -> 
+    ["Describe the main purpose of test case"];
+test_case_2(Config) when is_list(Config) -> 
+    ?line 3 = 4,
+    true.

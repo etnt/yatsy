@@ -1,0 +1,80 @@
+
+Yatsy : Yet Another Test Server - Yaws compatible
+-------------------------------------------------
+
+This is a simple test framework for testing your Erlang code.
+
+Basically, what you do is:
+
+ 1. Write Erlang code that tests the functionality of your system.
+
+ 2. Put the code in an xxx_SUITE.erl file (see example in .../yatsy/priv)
+
+ 3. Make sure the xxx_SUITE.erl file is compiled.
+
+ 4. Checkout and compile Yatsy (http://code.google.com/p/yatsy)
+
+ 5. Start your system and make sure that the code path includes
+    the .../yatsy/ebin directory.
+
+ 6. Run: yatsy:start()
+
+    (This will start the Yatsy server, which will lookup, via the code
+     path, all xxx_SUITE.beam files.)
+
+ 7. Run: yatsy:run()
+    
+    (This will cause Yatsy to run all the test cases.)
+
+The Yatsy server now holds the result from running all the
+test cases. You can get a crude picture of the result by
+issuing: yatsy_ts:print_state() .
+
+A better solution is to browse the result with a web browser.
+In the directory ...yatsy/priv you will find the file: ybed.erl
+
+ 1. Edit the DOCROOT in the file to suit your situation.
+
+ 2. Compile it as: erlc -I <path-to-yaws-include-dir> -o ../ebin ybed.erl
+
+You should now be able to start Yaws as: ybed:start().
+Check with: inet:i() that the correct port is in the LISTEN state.
+Point your browser to:
+
+ http://<your-host>:8888/yatsy.yaws
+
+and browse the result.
+
+It is also possible to run Yatsy separately from your
+target system, and have Yatsy to make RPC calls to the
+target node. To make this work:
+
+ 1. Make sure to start the Yatsy Erlang node with the
+    same Erlang cookie as the target node.
+
+ 2. Make sure the Yatsy node has all the relevant ebin directories
+    in its code path.
+
+ 3. Start Yatsy as: yatsy:start([{remote_node, TargetNodeName}]).
+    Where TargetNodeName is the Erlang node name of the target node.
+
+ 4. Continue as in (7) above.
+
+
+Cheers, Tobbe
+
+Footnote:
+---------
+Yatsy is written as a less complex alternative to the original Erlang Test 
+Server (ETS) that can be found at:
+
+   http://www.erlang.org/project/test_server/index.html 
+
+Yatsy is using (almost) the same format of the SUITE test case files 
+as ETS do. See the priv/yatsy_SUITE.erl as an example.
+
+
+
+
+
+ 
