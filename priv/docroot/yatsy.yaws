@@ -1,0 +1,37 @@
+<erl>
+out(A) ->
+    %%
+    %% Example use of the yatsy_rg API !
+    %%
+    App   = yaws_api:getvar(A,"app"),
+    Suite = yaws_api:getvar(A,"suite"),
+    TC    = yaws_api:getvar(A,"tc"),
+    dispatch(App, Suite, TC).
+
+
+dispatch(undefined, undefined, undefined) ->
+    {ehtml,
+     [{h1, [], "The Application Page"},
+      yatsy:top("yatsy.yaws")]};
+%%
+dispatch({ok,App}, undefined, undefined) ->
+    {ehtml,
+     [{h1, [], "Test Suites in application: "++App},
+      yatsy:top("yatsy.yaws?app="++App)]};
+%%
+dispatch({ok,App}, {ok, Suite}, undefined) ->
+    {ehtml,
+     [{h1, [], "Test Cases in test suite: "++Suite},
+      yatsy:top("yatsy.yaws?app="++App++"&suite="++Suite)]};
+%%
+dispatch({ok,App}, {ok, Suite}, {ok, TC}) ->
+    {ehtml,
+     [{h1, [], "Test Case: "++TC},
+      yatsy:top("yatsy.yaws?app="++App++"&suite="++Suite++"&tc="++TC)]};
+%%
+dispatch(_, _, _) ->
+    {ehtml,
+     [{p, [], "ERROR: Wrong query argument input!"}]}.
+
+
+</erl>
