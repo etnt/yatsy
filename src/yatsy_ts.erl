@@ -14,7 +14,9 @@
 	 suite_doc_reply/1,
 	 tc_run_reply/1,
 	 fail/0, fail/1,
-	 print_state/0
+	 print_state/0,
+
+	 l2a/1, a2l/1
 	]).
 
 -export([test/0]).
@@ -23,7 +25,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
 
--include("../include/yatsy.hrl").
+-include("yatsy_ts.hrl").
 
 -define(ilog(X,Y), error_logger:info_msg("*ilog ~p:~p: " X,
 					 [?MODULE, ?LINE | Y])).
@@ -219,9 +221,10 @@ cancel_timer(#s{timer_ref = Tref})  -> timer:cancel(Tref).
 set_suite_doc(#s{current = A} = S, {ok, Doc}) when list(Doc) ->
     Suite = A#app.current,
     S#s{current = A#app{current = Suite#suite{doc = Doc}}};
-set_suite_doc(#s{current = A} = S, _) ->
+set_suite_doc(#s{current = A} = S, Else) ->
     Suite = A#app.current,
-    S#s{current = A#app{current = Suite#suite{doc = ?EMSG_FAILED_SUITE_DOC}}}.
+    S#s{current = A#app{current = Suite#suite{doc = Else}}}.
+
 
 set_suite_tc(#s{current = A} = S, {ok, TCs}) when list(TCs)  ->
     Suite = A#app.current,
@@ -230,6 +233,7 @@ set_suite_tc(#s{current = A} = S, _) ->
     Suite = A#app.current,
     S#s{current = A#app{current = Suite#suite{queue = []}}}.
 
+
 set_tc_rc(#s{current = A} = S, ok) ->
     Suite = A#app.current,
     TC = Suite#suite.current,
@@ -237,7 +241,7 @@ set_tc_rc(#s{current = A} = S, ok) ->
 set_tc_rc(#s{current = A} = S, Else) ->
     Suite = A#app.current,
     TC = Suite#suite.current,
-    NewTC = TC#tc{rc = error, error = lists:flatten(io_lib:format("~p", [Else]))},
+    NewTC = TC#tc{rc = error, error = Else},
     S#s{current = A#app{current = Suite#suite{current = NewTC}}}.
 
 
@@ -257,7 +261,7 @@ run_tc(#s{remote_node = N, current = #app{current = #suite{doc = false}}} = S) -
     %% Must be first time we enter this suite, so we start off by
     %% retrieving the suite doc string.
     ?ilog("+++++++ Suite=~p, doc=false~n", [suite_name(S)]),
-    Pid =  yatsy_tc:suite_doc(N, suite_name(S)),
+    Pid =  yatsy_tc:suite_doc_and_load(N, suite_name(S)),
     {ok, Tref} = timer:send_after(?DEFAULT_TIMEOUT, {timeout_suite_doc, Pid}),
     S#s{pid = Pid, timer_ref = Tref};
 %%
@@ -415,6 +419,10 @@ fail() ->
 
 l2a(L) when list(L) -> list_to_atom(L);
 l2a(A) when atom(A) -> A.
+
+a2l(A) when atom(A) -> atom_to_list(A);
+a2l(L) when list(L) -> L.
+
 
 config(Key, L) when list(L) ->
     case lists:keysearch(Key, 1, L) of

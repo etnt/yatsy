@@ -5,11 +5,13 @@
 -module(yatsy_tc).
 
 -export([run/4,
-	 suite_doc/2,
+	 suite_doc_and_load/2,
 	 suite_tc/2
 	]).
 
--include("../include/yatsy.hrl").
+-import(yatsy_ts, [l2a/1, a2l/1]).
+
+-include("yatsy_ts.hrl").
 
 
 %%%
@@ -35,17 +37,25 @@ get_tc_doc(Node, Mod, #tc{name = Tname} = TC) ->
     end.
 
 %%%
-%%% Get the documentation for this suite.
+%%% Check if the module can be loaded and then
+%%% get the documentation for this suite.
 %%%
-suite_doc(Node, Mod) -> 
+suite_doc_and_load(Node, Mod) -> 
     Self = self(),
-    spawn(fun() -> do_suite_doc(Self, Node, Mod, all, [doc]) end).
+    spawn(fun() -> do_suite_doc_and_load(Self, Node, Mod, all, [doc]) end).
 
-do_suite_doc(_Pid, Node, Mod, Fun, Args) ->
-    case call(Node, Mod, Fun, Args) of
-	[Str] when list(Str) -> yatsy_ts:suite_doc_reply({ok, Str});
-	Else                 -> yatsy_ts:suite_doc_reply({error, Else})
+do_suite_doc_and_load(_Pid, Node, Mod, Fun, Args) ->
+    case call(Node, code, load_file, [Mod]) of
+	{module, Mod} ->
+	    case call(Node, Mod, Fun, Args) of
+		[Str] when list(Str) -> yatsy_ts:suite_doc_reply({ok, Str});
+		Else                 -> yatsy_ts:suite_doc_reply({error, Else})
+	    end;
+	_ ->
+	    Emsg = "(yatsy) failed to load module: "++a2l(Mod),
+	    yatsy_ts:suite_doc_reply({error, Emsg})
     end.
+	
     
 
 %%%
@@ -68,18 +78,42 @@ do_run(_Pid, Node, Mod, #tc{name = Fun}, Config) ->
 		    yatsy_ts:tc_run_reply({error, Else})
 	    end;
 	Else ->
-	    yatsy_ts:tc_run_reply({error, Else})
+	    yatsy_ts:tc_run_reply({error, {init_per_testcase, Else}})
     end.
     
 
-call(false, Mod, Fun, Args) -> catch apply(l2a(Mod), l2a(Fun), Args);
+call(false, Mod, Fun, Args) -> local_call(Mod, Fun, Args);
 call(Node, Mod, Fun, Args)  -> do_rpc(Node, Mod, Fun, Args).
+
+
+local_call(Mod, Fun, Args) ->
+    case catch apply(l2a(Mod), l2a(Fun), Args) of
+	{'EXIT', Reason} ->
+	    Loc = get_loc(),
+	    {yatsy_exit, Loc, Reason};
+	false ->
+	    Loc = get_loc(),
+	    {failed, Loc};
+	true ->
+	    true;
+	Else ->
+	    Else      % to make 'init_per_testcase' work
+    end.
+	
+%%%
+%%% Location: {Module, Line} , put by the ?line macro
+%%%
+get_loc() ->
+    case get(yatsy_loc) of
+	{_Mod, _Line} = Res -> Res;
+	_                   -> false
+    end.
+
+
 
 do_rpc(Node, Mod, Fun, Args) -> tbd.   % FIXME
 
 
-l2a(L) when list(L) -> list_to_atom(L);
-l2a(A) when atom(A) -> A.
 
 
 
