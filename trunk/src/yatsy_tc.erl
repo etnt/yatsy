@@ -45,6 +45,7 @@ suite_doc_and_load(Node, Mod) ->
     spawn(fun() -> do_suite_doc_and_load(Self, Node, Mod, all, [doc]) end).
 
 do_suite_doc_and_load(_Pid, Node, Mod, Fun, Args) ->
+    call(Node, code, purge, [Mod]),
     case call(Node, code, load_file, [Mod]) of
 	{module, Mod} ->
 	    case call(Node, Mod, Fun, Args) of
@@ -111,7 +112,11 @@ get_loc() ->
 
 
 
-do_rpc(Node, Mod, Fun, Args) -> tbd.   % FIXME
+do_rpc(Node, Mod, Fun, Args) -> 
+    rpc:call(Node, l2a(Mod), l2a(Fun), Args).
+
+
+
 
 
 

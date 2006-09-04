@@ -49,7 +49,8 @@
 
 
 test() -> 
-    start([{yaws_top_dir, "/home/tobbe/Kreditor/kred/lib"}]).
+    start([{top_dir, "/home/tobbe/Kreditor/kred/lib"},
+	   {remote_node, kred@sej}]).
 
 
 
@@ -114,14 +115,67 @@ tc_run_reply(Res) ->
 %%--------------------------------------------------------------------
 init(Config) when list(Config) ->
     State = setup(Config ++ ?DEFAULT_CONF),
-    {ok, State}.
+    remote_node_check(State).
 
 setup(Config) ->
     TopDir = get_top_dir(Config),
-    #s{top_dir = TopDir,
-       config  = Config,
-       queue   = get_apps(TopDir)
+    #s{top_dir     = TopDir,
+       config      = Config,
+       remote_node = get_remote_node(Config),
+       queue       = get_apps(TopDir)
       }.
+
+remote_node_check(#s{remote_node = false} = State) ->
+    {ok, State};
+%%
+remote_node_check(#s{remote_node = Node} = State) ->
+    case load_ourself(Node) of
+	ok ->
+	    {ok, State};
+	{error, Reason} ->
+	    {stop, Reason}
+    end.
+
+load_ourself(Node) ->
+    case net_adm:ping(Node) of
+	pong ->
+	    ?ilog("Contacted node: ~p~n", [Node]),
+	    YatsyModules = get_yatsy_modules(),
+	    L = [purge_and_load(Node, Mod, Fname, Bin) ||
+		    {Mod, Fname, Bin} <- YatsyModules],
+	    case lists:member(false, L) of
+		true ->
+		    E = "failed to load Yatsy modules on node: "++a2l(Node),
+		    ?ilog("~s~n", [E]),
+		    {error, E};
+		_ ->
+		    ?ilog("Yes, loaded modules OK~n", []),
+		    ok
+	    end;
+	_ ->
+	    E = "failed to contact node: "++a2l(Node),
+	    ?ilog("~s~n", [E]),
+	    {error, E}
+    end.
+
+purge_and_load(Node, Mod, Fname, Bin) ->
+    rpc:call(Node, code, purge, [Mod]),
+    case rpc:call(Node, code, load_binary, [Mod, Fname, Bin]) of
+	{module, Mod} -> true;
+	_             -> false
+    end.
+
+
+get_yatsy_modules() ->
+    Mods = [yatsy_ts, yatsy_tc],
+    F = fun(M) ->
+		Path = code:which(M),
+		Fname = filename:basename(Path, ".beam"),
+		{ok, Bin} = file:read_file(Path),
+		{M, Fname, Bin}
+	end,
+    lists:map(F, Mods).
+
 
 %%--------------------------------------------------------------------
 %% Function: %% handle_call(Request, From, State) -> {reply, Reply, State} |
@@ -353,16 +407,6 @@ next_tc(#suite{finished = F, current = C, queue = []} = X) ->
 
 
 
-get_top_dir(Config) -> 
-    case config(yaws_top_dir, Config) of
-	{ok, Dir} -> Dir;
-	_ ->
-	    case os:getenv("YATSY_TOP_DIR") of
-		false -> ".";   % fallback
-		Dir   -> Dir
-	    end
-    end.
-
 get_apps(TopDir) -> 
     Paths = filter_code_path(TopDir),
     F = fun(P, Acc) ->
@@ -422,6 +466,32 @@ l2a(A) when atom(A) -> A.
 
 a2l(A) when atom(A) -> atom_to_list(A);
 a2l(L) when list(L) -> L.
+
+
+%%%
+%%% Configuration handling
+%%%
+
+get_top_dir(Config) -> 
+    case config(top_dir, Config) of
+	{ok, Dir} -> Dir;
+	_ ->
+	    case os:getenv("YATSY_TOP_DIR") of
+		false -> ".";   % fallback
+		Dir   -> Dir
+	    end
+    end.
+
+get_remote_node(Config) -> 
+    case config(remote_node, Config) of
+	{ok, Dir} -> Dir;
+	_ ->
+	    case os:getenv("YATSY_REMOTE_NODE") of
+		false -> false;   % no rpc tp be made
+		Dir   -> Dir
+	    end
+    end.
+
 
 
 config(Key, L) when list(L) ->
