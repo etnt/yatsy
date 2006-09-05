@@ -16,7 +16,7 @@
 	 fail/0, fail/1,
 	 print_state/0, next_tc/0,
 	 get_finished/0,
-
+	 yaws_docroot/0, yaws_host/0, yaws_port/0, yaws_listen/0,
 	 l2a/1, a2l/1
 	]).
 
@@ -103,6 +103,18 @@ print_state() ->
     gen_server:cast(?SERVER, print_state).
 
 
+%%% Embedded yaws configuration parameters.
+yaws_docroot() ->
+    gen_server:call(?SERVER, yaws_docroot, infinity).
+
+yaws_host() ->
+    gen_server:call(?SERVER, yaws_host, infinity).
+
+yaws_port() ->
+    gen_server:call(?SERVER, yaws_port, infinity).
+
+yaws_listen() ->
+    gen_server:call(?SERVER, yaws_listen, infinity).
 
 
 
@@ -215,8 +227,20 @@ handle_call(get_finished, _From, State) ->
     {reply, {ok, State#s.finished}, State};
 %%
 handle_call(next_tc, _From, State) ->
-    io:format("~n~p~n", [State]),
+    ?ilog("~n~p~n", [State]),
     {reply, next_tc(State), State};
+%%
+handle_call(yaws_docroot, _From, State) ->
+    {reply, config(yaws_docroot, State#s.config, default_docroot()), State};
+%%
+handle_call(yaws_host, _From, State) ->
+    {reply, config(yaws_host, State#s.config, default_host()), State};
+%%
+handle_call(yaws_port, _From, State) ->
+    {reply, config(yaws_port, State#s.config, default_port()), State};
+%%
+handle_call(yaws_listen, _From, State) ->
+    {reply, config(yaws_listen, State#s.config, default_listen()), State};
 %%
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -292,6 +316,19 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
+
+default_docroot() ->
+    filename:join(
+      lists:reverse(["docroot", "priv" | 
+		     tl(lists:reverse(
+			  filename:split(
+			    filename:dirname(
+			      code:which(yatsy)))))])).
+
+default_host()   -> "localhost".
+default_port()   -> 8888.
+default_listen() -> {0,0,0,0}.
+    
 
 cancel_timer(#s{timer_ref = false}) -> false;
 cancel_timer(#s{timer_ref = Tref})  -> timer:cancel(Tref).
@@ -516,6 +553,12 @@ get_remote_node(Config) ->
     end.
 
 
+
+config(Key, L, Default) ->
+    case config(Key, L) of
+	{ok, Value} -> Value;
+	_           -> Default
+    end.
 
 config(Key, L) when list(L) ->
     case lists:keysearch(Key, 1, L) of
