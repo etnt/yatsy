@@ -552,6 +552,16 @@ get_remote_node(Config) ->
 	    end
     end.
 
+get_output_dir(Config) -> 
+    case config(output_dir, Config) of
+	{ok, Dir} -> Dir;
+	_ ->
+	    case os:getenv("YATSY_OUTPUT_DIR") of
+		false -> false;   
+		Dir   -> Dir
+	    end
+    end.
+
 
 
 config(Key, L, Default) ->
