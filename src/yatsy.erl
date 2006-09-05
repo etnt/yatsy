@@ -1,6 +1,36 @@
 %%%-------------------------------------------------------------------
 %%% Created :  4 Sep 2006 by Torbjorn Tornkvist <tobbe@sej.hq.kred>
 %%% Descr.  : (yatsy) Yet Another Test Server - Yaws compatible 
+%%%
+%%% @doc YATSY: Yet Another Test Server - Yaws compatible 
+%%%     
+%%% <p>Yatsy is a simple test framework for testing your Erlang code.</p>
+%%%
+%%% <p>Basically, what you do is:
+%%%   <ol>
+%%%     <li>Write Erlang code that tests the functionality 
+%%%         of your system.</li>
+%%%
+%%%     <li>Put the code in an xxx_SUITE.erl file.</li>
+%%%
+%%%     <li>Make sure the xxx_SUITE.erl file is compiled.</li>
+%%%
+%%%     <li>Checkout and compile Yatsy.</li>
+%%%
+%%%     <li>Start your system and make sure that the code path 
+%%%         includes the .../yatsy/ebin directory.</li>
+%%%
+%%%     <li>Run: yatsy:quick().</li>
+%%%
+%%%     <li>Point a Web Browser to http://localhost:8888/yatsy.yaws
+%%%         and study the result from the test cases.</li>
+%%%
+%%%   </ol>
+%%% </p>
+%%%
+%%%
+%%% @author  Torbjörn Törnkvist <tobbe@tornkvist.org>
+%%% @end
 %%%-------------------------------------------------------------------
 -module(yatsy).
 
