@@ -38,15 +38,15 @@
 	 run/0, clean/0, clean_and_run/0,
 	 top/1, app/2, suite/3, tc/4,
 	 start_yaws/0, start_yaws/4,
-	 quick/0
+	 quick/0, quick/1
 	 ]).
 
 -export([test/0]).
 
 test() ->
-    start_yaws(),
     yatsy_ts:test(),
     yatsy_rg:start(),
+    start_yaws(),
     yatsy_ts:run().
 
 
@@ -67,9 +67,12 @@ start_yaws(DocRoot, Host, Port, Listen) ->
 %%% Yatsy Test Server interface
 %%%
 quick() ->
-    start_yaws(),
-    yatsy_ts:start(),
+    quick([]).
+
+quick(Config) ->
+    yatsy_ts:start(Config),
     yatsy_rg:start(),
+    start_yaws(),
     yatsy_ts:run().
 
 start() ->
