@@ -37,7 +37,7 @@
 -export([start/0, start_link/0, start/1, start_link/1,
 	 run/0, clean/0, clean_and_run/0,
 	 top/1, app/2, suite/3, tc/4,
-	 start_yaws/0, start_yaws/4,
+	 start_yaws/0,
 	 quick/0, quick/1
 	 ]).
 
@@ -54,13 +54,15 @@ test() ->
 %%% Start Yaws in embedded mode.
 %%%
 start_yaws() ->
-    start_yaws(yatsy_ts:yaws_docroot(),
-	       yatsy_ts:yaws_host(),
-	       yatsy_ts:yaws_port(),
-	       yatsy_ts:yaws_listen()).
-
-start_yaws(DocRoot, Host, Port, Listen) ->
-    yaws:start_embedded(DocRoot, Host, Port, Listen).
+    DocRoot = yatsy_ts:yaws_docroot(),
+    {ok, OutDir}  = yatsy_ts:out_dir(),
+    Host    = yatsy_ts:yaws_host(),
+    Port    = yatsy_ts:yaws_port(),
+    Listen  = yatsy_ts:yaws_listen(),
+    SL = [{host, Host}, {port, Port}, {listen, Listen}],
+    GL = [{logdir, OutDir}],
+    io:format(" ++++++ yaws:start_embedded(~p,~p,~p).~n", [DocRoot, SL, GL]),
+    yaws:start_embedded(DocRoot, SL, GL).
 
     
 %%%
@@ -71,9 +73,27 @@ quick() ->
 
 quick(Config) ->
     yatsy_ts:start(Config),
+    wait_for_yatsy_ts(),
     yatsy_rg:start(),
+    sleep(100),
     start_yaws(),
+    sleep(100),
     yatsy_ts:run().
+
+%%% In case of a remote node; Yatsy talks to that node
+%%% which may take some time to finished. Hence, we 
+%%% are polling for it to become started.
+wait_for_yatsy_ts() ->
+    case catch yatsy_ts:get_status() of
+	{ok, _} ->
+	    true;
+	_ ->
+	    sleep(500),
+	    wait_for_yatsy_ts()
+    end.
+
+sleep(T) -> 
+    receive after T -> true end.
 
 start() ->
     start([]).

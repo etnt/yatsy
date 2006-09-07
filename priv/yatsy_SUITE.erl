@@ -20,8 +20,8 @@
 %% Note: This function is free to add any key/value pairs to the Config
 %% variable, but should NOT alter/remove any existing entries.
 %%--------------------------------------------------------------------
-init_per_suite(Config) ->
-    Config.
+init_per_suite(Config) when list(Config) ->
+    {ok, Config}.
 
 %%--------------------------------------------------------------------
 %% Function: end_per_suite(Config) -> _
