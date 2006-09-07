@@ -12,12 +12,14 @@
 	 run/0, clean/0, clean_and_run/0,
 	 suite_tc_reply/1,
 	 suite_doc_reply/1,
+	 suite_init_reply/1,
 	 tc_run_reply/1,
 	 fail/0, fail/1,
 	 print_state/0, next_tc/0,
 	 get_finished/0,
 	 yaws_docroot/0, yaws_host/0, yaws_port/0, yaws_listen/0,
-	 l2a/1, a2l/1
+	 l2a/1, a2l/1,
+	 out_dir/0, get_status/0
 	]).
 
 -export([test/0]).
@@ -39,6 +41,7 @@
 
 -define(SERVER, ?MODULE).
 -define(DEFAULT_CONF, [{cback_mod, ?MODULE}]).
+-define(BOOL_P(B), ((B == true);(B == false))).
 
 -record(s, {
 	  status = ?YATSY_IDLE,       % idle | running 
@@ -49,6 +52,7 @@
 	  timer_ref = false,          % Outstanding timeout timer reference
 	  error = false,              % Error reason when (status == ?YATSY_ERROR)
 	  config = ?DEFAULT_CONF,     % Any external configuration {Key,Value} tuples
+	  out_dir = ".",
 	  finished = [],              % list of #app{}
 	  current = false,
 	  queue = []                  % list of #app{}
@@ -98,6 +102,9 @@ get_finished() ->
 next_tc() ->
     gen_server:call(?SERVER, next_tc, infinity).
 
+get_status() ->
+    gen_server:call(?SERVER, get_status, infinity).
+
 
 print_state() ->
     gen_server:cast(?SERVER, print_state).
@@ -116,6 +123,9 @@ yaws_port() ->
 yaws_listen() ->
     gen_server:call(?SERVER, yaws_listen, infinity).
 
+out_dir() ->
+    gen_server:call(?SERVER, out_dir, infinity).
+
 
 
 suite_tc_reply(Res) ->
@@ -123,6 +133,9 @@ suite_tc_reply(Res) ->
 
 suite_doc_reply(Res) ->
     gen_server:cast(?SERVER, {suite_doc_reply, self(), Res}).
+
+suite_init_reply(Res) ->
+    gen_server:cast(?SERVER, {suite_init_reply, self(), Res}).
 
 tc_run_reply(Res) ->
     gen_server:cast(?SERVER, {tc_run_reply, self(), Res}).
@@ -141,30 +154,36 @@ tc_run_reply(Res) ->
 %% Description: Initiates the server
 %%--------------------------------------------------------------------
 init(Config) when list(Config) ->
+    ?ilog("yatsy_ts: Starting...~n", []),
     State = setup(Config ++ ?DEFAULT_CONF),
     remote_node_check(State).
 
 setup(Config) ->
     TopDir = get_top_dir(Config),
+    OutDir = get_output_dir(Config),
     #s{top_dir     = TopDir,
+       out_dir     = OutDir,
        config      = Config,
        remote_node = get_remote_node(Config),
        queue       = get_apps(TopDir)
       }.
 
 remote_node_check(#s{remote_node = false} = State) ->
+    ?ilog("yatsy_ts: Ready...~n", []),
     {ok, State};
 %%
 remote_node_check(#s{remote_node = Node} = State) ->
     case load_ourself(Node) of
 	ok ->
+	    ?ilog("yatsy_ts: Ready...~n", []),
 	    {ok, State};
 	{error, Reason} ->
+	    ?ilog("yatsy_ts: Failed to start, reason: ~p~n", [Reason]),
 	    {stop, Reason}
     end.
 
 load_ourself(Node) ->
-    case net_adm:ping(Node) of
+    case ping(Node) of
 	pong ->
 	    ?ilog("Contacted node: ~p~n", [Node]),
 	    YatsyModules = get_yatsy_modules(),
@@ -184,6 +203,23 @@ load_ourself(Node) ->
 	    ?ilog("~s~n", [E]),
 	    {error, E}
     end.
+
+ping(Node) ->
+    ping(Node, 10).
+
+ping(_, 0) -> pong;
+ping(Node, N) when N>0 ->
+    ?ilog("Trying to contact node: ~p~n", [Node]),
+    case net_adm:ping(Node) of
+	pong -> pong;
+	_ ->
+	    sleep(500),
+	    ping(Node, N-1)
+    end.
+
+sleep(T) -> 
+    receive after T -> true end.
+
 
 purge_and_load(Node, Mod, Fname, Bin) ->
     rpc:call(Node, code, purge, [Mod]),
@@ -230,6 +266,9 @@ handle_call(next_tc, _From, State) ->
     ?ilog("~n~p~n", [State]),
     {reply, next_tc(State), State};
 %%
+handle_call(get_status, _From, State) ->
+    {reply, {ok, State#s.status}, State};
+%%
 handle_call(yaws_docroot, _From, State) ->
     {reply, config(yaws_docroot, State#s.config, default_docroot()), State};
 %%
@@ -241,6 +280,9 @@ handle_call(yaws_port, _From, State) ->
 %%
 handle_call(yaws_listen, _From, State) ->
     {reply, config(yaws_listen, State#s.config, default_listen()), State};
+%%
+handle_call(out_dir, _From, State) ->
+    {reply, {ok, State#s.out_dir}, State};
 %%
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -265,6 +307,11 @@ handle_cast({suite_doc_reply, Pid, Res}, #s{pid = Pid} = State) ->
     cancel_timer(State),
     {noreply, exec_tc(set_suite_doc(State#s{timer_ref = false}, Res))};
 %%
+handle_cast({suite_init_reply, Pid, Res}, #s{pid = Pid} = State) ->
+    ?dlog("got suite_doc_reply, Res=~p~n", [Res]),
+    cancel_timer(State),
+    {noreply, exec_tc(set_suite_init(State#s{timer_ref = false}, Res))};
+%%
 handle_cast({suite_tc_reply, Pid, Res}, #s{pid = Pid} = State) ->
     ?dlog("got suite_tc_reply, Res=~p~n", [Res]),
     cancel_timer(State),
@@ -287,6 +334,10 @@ handle_cast(_Msg, State) ->
 handle_info({timeout_suite_doc, Pid}, #s{pid = Pid} = State) ->
     ?dlog("timeout_suite_doc~n", []),
     {noreply, exec_tc(set_suite_doc(State, ?EMSG_FAILED_SUITE_DOC))};
+%%
+handle_info({timeout_suite_init, Pid}, #s{pid = Pid} = State) ->
+    ?dlog("timeout_suite_init~n", []),
+    {noreply, exec_tc(set_suite_init(State, "timedout"))};
 %%
 handle_info({timeout_suite_tc, Pid}, #s{pid = Pid} = State) ->
     ?dlog("timeout_suite_tc~n", []),
@@ -341,6 +392,13 @@ set_suite_doc(#s{current = A} = S, Else) ->
     Suite = A#app.current,
     S#s{current = A#app{current = Suite#suite{doc = Else}}}.
 
+set_suite_init(#s{current = A} = S, {ok, Config})  ->
+    Suite = A#app.current,
+    S#s{current = A#app{current = Suite#suite{init = true, config = Config}}};
+set_suite_init(#s{current = A} = S, Res)  ->
+    Suite = A#app.current,
+    ?ilog("Failed to run ~s:init_per_suite/1, reason: ~p~n", [Res]),
+    S#s{current = A#app{current = Suite#suite{init = true, config = []}}}.
 
 set_suite_tc(#s{current = A} = S, {ok, TCs}) when list(TCs)  ->
     Suite = A#app.current,
@@ -380,8 +438,15 @@ run_tc(#s{remote_node = N, current = #app{current = #suite{doc = false}}} = S) -
     {ok, Tref} = timer:send_after(?DEFAULT_TIMEOUT, {timeout_suite_doc, Pid}),
     S#s{pid = Pid, timer_ref = Tref};
 %%
+run_tc(#s{remote_node = N, current = #app{current = #suite{init = false}}} = S) -> 
+    %% Must be the second time we enter this suite, 
+    %% we need to call the init_per_suite/ function.
+    Pid =  yatsy_tc:suite_init(N, suite_name(S), S#s.config),
+    {ok, Tref} = timer:send_after(?DEFAULT_TIMEOUT, {timeout_suite_init, Pid}),
+    S#s{pid = Pid, timer_ref = Tref};
+%%
 run_tc(#s{remote_node = N, current = #app{current = #suite{queue = false}}} = S) -> 
-    %% Must be second time we enter this suite, so we continue by
+    %% Must be the third time we enter this suite, so we continue by
     %% retrieving the Test Case names of the suite.
     Pid =  yatsy_tc:suite_tc(N, suite_name(S)),
     {ok, Tref} = timer:send_after(?DEFAULT_TIMEOUT, {timeout_suite_tc, Pid}),
@@ -544,11 +609,11 @@ get_top_dir(Config) ->
 
 get_remote_node(Config) -> 
     case config(remote_node, Config) of
-	{ok, Dir} -> Dir;
+	{ok, Node} -> l2a(Node);
 	_ ->
 	    case os:getenv("YATSY_REMOTE_NODE") of
 		false -> false;   % no rpc tp be made
-		Dir   -> Dir
+		Node   -> l2a(Node)
 	    end
     end.
 

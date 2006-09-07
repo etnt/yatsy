@@ -6,6 +6,7 @@
 
 -export([run/4,
 	 suite_doc_and_load/2,
+	 suite_init/3,
 	 suite_tc/2
 	]).
 
@@ -55,6 +56,20 @@ do_suite_doc_and_load(_Pid, Node, Mod, Fun, Args) ->
 	_ ->
 	    Emsg = "(yatsy) failed to load module: "++a2l(Mod),
 	    yatsy_ts:suite_doc_reply({error, Emsg})
+    end.
+	
+%%%
+%%% Check if the module can be loaded and then
+%%% get the documentation for this suite.
+%%%
+suite_init(Node, Mod, Config) -> 
+    Self = self(),
+    spawn(fun() -> do_suite_init(Self, Node, Mod, init_per_suite, [Config]) end).
+
+do_suite_init(_Pid, Node, Mod, Fun, Args) ->
+    case call(Node, Mod, Fun, Args) of
+	NewConf when list(NewConf) -> yatsy_ts:suite_init_reply({ok, NewConf});
+	Else                       -> yatsy_ts:suite_init_reply({error, Else})
     end.
 	
     
