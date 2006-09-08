@@ -30,14 +30,6 @@
 
 -include("yatsy_ts.hrl").
 
--define(ilog(X,Y), error_logger:info_msg("*ilog ~p:~p: " X,
-					 [?MODULE, ?LINE | Y])).
-
--ifdef(debug).
--define(dlog(X,Y), ?ilog(X,Y)).
--else.
--define(dlog(X,Y), true).
--endif.
 
 -define(SERVER, ?MODULE).
 -define(DEFAULT_CONF, [{cback_mod, ?MODULE}]).
@@ -52,9 +44,11 @@
 	  timer_ref = false,          % Outstanding timeout timer reference
 	  error = false,              % Error reason when (status == ?YATSY_ERROR)
 	  config = ?DEFAULT_CONF,     % Any external configuration {Key,Value} tuples
-	  out_dir = ".",
+	  out_dir = ".",              % Where to put all output from Yatsy
+	  quit = false,               % Quit when finished
+	  gen_html = false,           % Generate HTML content when finished
 	  finished = [],              % list of #app{}
-	  current = false,
+	  current = false,            % #app{}
 	  queue = []                  % list of #app{}
 	 }).
 
@@ -160,11 +154,12 @@ init(Config) when list(Config) ->
 
 setup(Config) ->
     TopDir = get_top_dir(Config),
-    OutDir = get_output_dir(Config),
     #s{top_dir     = TopDir,
-       out_dir     = OutDir,
+       out_dir     = get_output_dir(Config),
+       gen_html    = l2bool(get_generate_html(Config)),
        config      = Config,
-       remote_node = get_remote_node(Config),
+       quit        = l2bool(get_quit_when_finished(Config)),
+       remote_node = l2a(get_remote_node(Config)),
        queue       = get_apps(TopDir)
       }.
 
@@ -250,6 +245,7 @@ get_yatsy_modules() ->
 %% Description: Handling call messages
 %%--------------------------------------------------------------------
 handle_call(run, _From, State) when State#s.status == ?YATSY_IDLE ->
+    ?ilog("Yatsy starting...~n", []),
     {reply, ok, exec_tc(State)};
 handle_call(run, _From, State) when State#s.status == ?YATSY_RUNNING ->
     {reply, {error, "already running"}, State};
@@ -298,8 +294,6 @@ handle_cast({tc_run_reply, Pid, Res}, #s{pid = Pid} = State) ->
     ?dlog(" got tc_run_reply, Res=~p~n", [Res]),
     cancel_timer(State),
     NewState = exec_tc(set_tc_rc(State#s{timer_ref = false}, Res)),
-    ?ilog(" got tc_run_reply, Res=~p, ~n  NewState=~p~n", [Res,NewState]),
-    %%{noreply, exec_tc(set_tc_rc(State#s{timer_ref = false}, Res))};
     {noreply, NewState};
 %%
 handle_cast({suite_doc_reply, Pid, Res}, #s{pid = Pid} = State) ->
@@ -426,8 +420,16 @@ exec_tc(State) ->
     ?dlog("State=~p~n", [State]),
     case next_tc(State) of
 	{true, NewState} -> run_tc(NewState#s{status = ?YATSY_RUNNING});
-	false            -> State#s{status = ?YATSY_IDLE}
+	false            -> finished(State#s{status = ?YATSY_FINISHED})
     end.
+
+%%% Check if HTML should be generated
+finished(#s{status = ?YATSY_FINISHED, gen_html = true} = S) ->
+    ?ilog("Yatsy finished!~n", []),
+    yatsy_rg:ts_is_finished(S#s.finished, S#s.out_dir, S#s.quit),
+    S;
+finished(S) ->
+    S.
 
 
 %%
@@ -592,38 +594,38 @@ l2a(A) when atom(A) -> A.
 a2l(A) when atom(A) -> atom_to_list(A);
 a2l(L) when list(L) -> L.
 
+l2bool("true") -> true;
+l2bool(true)   -> true;
+l2bool(_)      -> false.
+
 
 %%%
 %%% Configuration handling
 %%%
 
 get_top_dir(Config) -> 
-    case config(top_dir, Config) of
-	{ok, Dir} -> Dir;
-	_ ->
-	    case os:getenv("YATSY_TOP_DIR") of
-		false -> ".";   % fallback
-		Dir   -> Dir
-	    end
-    end.
+    get_config_param("YATSY_TOP_DIR", top_dir, Config).
 
 get_remote_node(Config) -> 
-    case config(remote_node, Config) of
-	{ok, Node} -> l2a(Node);
-	_ ->
-	    case os:getenv("YATSY_REMOTE_NODE") of
-		false -> false;   % no rpc tp be made
-		Node   -> l2a(Node)
-	    end
-    end.
+    get_config_param("YATSY_REMOTE_NODE", remote_node, Config).
 
 get_output_dir(Config) -> 
-    case config(output_dir, Config) of
-	{ok, Dir} -> Dir;
+    get_config_param("YATSY_OUTPUT_DIR", output_dir, Config).
+
+get_generate_html(Config) -> 
+    get_config_param("YATSY_GENERATE_HTML", generate_html, Config).
+
+get_quit_when_finished(Config) -> 
+    get_config_param("YATSY_QUIT_WHEN_FINISHED", quit_when_finished, Config).
+
+
+get_config_param(EnvVar, Key, Config) -> 
+    case config(Key, Config) of
+	{ok, Value} -> Value;
 	_ ->
-	    case os:getenv("YATSY_OUTPUT_DIR") of
+	    case os:getenv(EnvVar) of
 		false -> false;   
-		Dir   -> Dir
+		Value -> Value
 	    end
     end.
 
