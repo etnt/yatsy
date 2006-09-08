@@ -61,7 +61,6 @@ start_yaws() ->
     Listen  = yatsy_ts:yaws_listen(),
     SL = [{host, Host}, {port, Port}, {listen, Listen}],
     GL = [{logdir, OutDir}],
-    io:format(" ++++++ yaws:start_embedded(~p,~p,~p).~n", [DocRoot, SL, GL]),
     yaws:start_embedded(DocRoot, SL, GL).
 
     
@@ -72,13 +71,16 @@ quick() ->
     quick([]).
 
 quick(Config) ->
-    yatsy_ts:start(Config),
-    wait_for_yatsy_ts(),
-    yatsy_rg:start(),
-    sleep(100),
-    start_yaws(),
-    sleep(100),
-    yatsy_ts:run().
+    %% Spawn us free from shell etc...
+    spawn(fun() ->
+		  yatsy_ts:start(Config),
+		  wait_for_yatsy_ts(),
+		  yatsy_rg:start(),
+		  sleep(100),
+		  start_yaws(),
+		  sleep(100),
+		  yatsy_ts:run()
+	  end).
 
 %%% In case of a remote node; Yatsy talks to that node
 %%% which may take some time to finished. Hence, we 

@@ -8,7 +8,9 @@
 
 %% API
 -export([start/0, start_link/0,
-	 top/1, app/2, suite/3, tc/4
+	 top/1, app/2, suite/3, tc/4,
+	 ts_is_finished/3,
+	 html/1, style/0
 	]).
 
 %% gen_server callbacks
@@ -16,6 +18,7 @@
 	 terminate/2, code_change/3]).
 
 -import(yatsy_ts, [a2l/1, l2a/1]).
+-import(yaws_api, [ehtml_expand/1]).
 
 -include("yatsy_ts.hrl").
 
@@ -48,6 +51,10 @@ suite(Url, App, Suite) ->
 
 tc(Url, App, Suite, Tc) ->
     gen_server:call(?SERVER, {tc, Url, App, Suite, l2a(Tc)}, infinity).
+
+ts_is_finished(Finished, OutDir, Quit) ->
+    gen_server:cast(?SERVER, {ts_is_finished, Finished, OutDir, Quit}).
+
 
 %%====================================================================
 %% gen_server callbacks
@@ -98,6 +105,15 @@ handle_call(_Request, _From, State) ->
 %%                                      {stop, Reason, State}
 %% Description: Handling cast messages
 %%--------------------------------------------------------------------
+handle_cast({ts_is_finished, Finished, OutDir, Quit}, State) ->
+    produce_html_output(Finished, OutDir),
+    ?ilog("Wrote HTML output!~n", []),
+    if (Quit == true) -> 
+	    ?ilog("Stopping yatsy...!~n", []),
+	    init:stop() 
+    end,
+    {noreply, State};
+%%
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -130,6 +146,111 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
+
+produce_html_output(Finished, OutDir) ->
+    HtmlDir = filename:join([OutDir, "html"]),
+    os:cmd("mkdir "++HtmlDir),
+    mk_top_page(Finished, HtmlDir),
+    mk_app_pages(Finished, HtmlDir),
+    mk_suite_pages(Finished, HtmlDir),
+    mk_tc_pages(Finished, HtmlDir).
+
+mk_top_page(Finished, HtmlDir) -> 
+    Page = ehtml_expand(html([{h1, [], "The Application Page"},
+			      do_top(fun(Name) -> html_app_fname(Name) end,
+				     Finished)])),     
+    Fname = filename:join([HtmlDir, "index.html"]),
+    file:write_file(Fname, list_to_binary(lists:flatten(Page))).
+
+
+mk_app_pages(Finished, HtmlDir) ->
+    Ps = [{A#app.name,
+	   ehtml_expand(html([{h1, [], "Test Suites in application: "++A#app.name},
+			      do_app(fun html_suite_fname/1,
+				     A#app.name,
+				     Finished)]))} ||
+	     A <- Finished],
+    [write_app_page(HtmlDir, A) || A <- Ps].
+
+write_app_page(HtmlDir, {Aname, Page}) ->
+    Fname = filename:join([HtmlDir, html_app_fname(Aname)]),
+    file:write_file(Fname, list_to_binary(lists:flatten(Page))).
+
+
+mk_suite_pages(Finished, HtmlDir) ->
+    lists:foreach(fun(A) -> mk_suite_page(Finished, HtmlDir, A) end, Finished).
+
+mk_suite_page(Finished, HtmlDir, A) when record(A, app) ->
+    Ps = [{S#suite.name,
+	   ehtml_expand(html([{h1, [], "Test Cases in test suite: "++A#app.name++"/"++S#suite.name},
+			      do_suite(fun(Tname) -> html_tc_fname(S#suite.name, Tname) end,
+				       A#app.name,
+				       S#suite.name,
+				       Finished)]))} ||
+	     S <- A#app.finished],
+    [write_suite_page(HtmlDir, P) || P <- Ps].
+
+write_suite_page(HtmlDir, {Name, Page}) ->
+    Fname = filename:join([HtmlDir, html_suite_fname(Name)]),
+    file:write_file(Fname, list_to_binary(lists:flatten(Page))).
+
+
+
+mk_tc_pages(Finished, HtmlDir) ->
+    lists:foreach(fun(A) -> 
+			  lists:foreach(fun(S) ->
+						mk_tc_page(Finished, HtmlDir, 
+							   A#app.name, S) 
+					end, A#app.finished)
+		  end, Finished).
+
+mk_tc_page(Finished, HtmlDir, Aname, S) when record(S, suite) ->
+    Ps = [{a2l(T#tc.name),
+	   S#suite.name,
+	   ehtml_expand(html([{h1, [], "Test Cases: "++Aname++"/"++S#suite.name++"/"++a2l(T#tc.name)},
+			      do_tc("",
+				    Aname,
+				    S#suite.name,
+				    T#tc.name,
+				    Finished)]))} ||
+	     T <- S#suite.finished],
+    [write_tc_page(HtmlDir, P) || P <- Ps].
+
+write_tc_page(HtmlDir, {Name, Sname, Page}) ->
+    Fname = filename:join([HtmlDir, html_tc_fname(Sname, Name)]),
+    file:write_file(Fname, list_to_binary(lists:flatten(Page))).
+
+
+
+html_app_fname(Aname) -> 
+    "yatsy_app_"++Aname++".html".
+
+html_suite_fname(Sname) -> 
+    "yatsy_suite_"++Sname++".html".
+
+html_tc_fname(Sname, Tname) -> 
+    "yatsy_tc_"++Sname++"_"++Tname++".html".
+
+
+html(Body) ->
+    [{html, [],
+      [{head, [],
+	[style()]},
+       {body, [], 
+	{'div', [{id, "yatsy_output"}], Body}}]}].
+
+style() ->
+    {style, [],
+     ["#yatsy_output {margin-left: 20px; margin-top: 40px}\n"
+      "#yatsy_output table {border-collapse: collapse}\n"
+      "#yatsy_output td {border: 1px solid black; padding: 3px 6px 3px 6px}\n"
+      "#yatsy_output th {border: 1px solid black; text-align: left; padding: 3px 6px 3px 6px}\n"
+      "#yatsy_output h1 {font-size: x-large; padding-bottom: 10px}\n"
+      ]}.
+
+
+
+
 
 do_top(Url, Apps) ->
     {'div', [{id, "yatsy_top"}],
@@ -210,6 +331,12 @@ get_tc(Tc, [_|T])                  -> get_tc(Tc, T);
 get_tc(_, [])                      -> {error, "not found"}.
 
 
+%%%
+%%% Either we generate one html page per app/suite/tc,
+%%% or we have one yatsy.yaws page + query arguments.
+%%%
+mk_link(F, _Key, Name) when function(F) ->
+    {a, [{href, F(Name)}], Name};
 mk_link(Url, Key, Aname) ->
     case qargs_p(Url) of
 	true -> {a, [{href, Url++"&"++Key++"="++Aname}], Aname};

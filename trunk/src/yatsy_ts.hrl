@@ -1,6 +1,15 @@
 -ifndef(YATSY_TS_HRL).
 -define(YATSY_TS_HRL, true).
 
+-define(ilog(X,Y), error_logger:info_msg("*ilog ~p:~p: " X,
+					 [?MODULE, ?LINE | Y])).
+
+-ifdef(debug).
+-define(dlog(X,Y), ?ilog(X,Y)).
+-else.
+-define(dlog(X,Y), true).
+-endif.
+
 -define(DEFAULT_TIMEOUT, 10000).    % 10 sek
 
 -define(EMSG_FAILED_SUITE_DOC, "(yatsy) failed to retrieve the Suite doc string").
@@ -34,6 +43,7 @@
 
 -define(YATSY_IDLE,     idle).
 -define(YATSY_RUNNING,  running).
+-define(YATSY_FINISHED, finished).
 -define(YATSY_ERROR,    error).
 
 -endif.
