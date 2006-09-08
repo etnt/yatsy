@@ -154,10 +154,12 @@ init(Config) when list(Config) ->
 
 setup(Config) ->
     TopDir = get_top_dir(Config),
+    OutDir = get_output_dir(Config),
+    NewConfig = overwrite({output_dir, OutDir}, Config),
     #s{top_dir     = TopDir,
-       out_dir     = get_output_dir(Config),
+       out_dir     = OutDir,
        gen_html    = l2bool(get_generate_html(Config)),
-       config      = Config,
+       config      = NewConfig,
        quit        = l2bool(get_quit_when_finished(Config)),
        remote_node = l2a(get_remote_node(Config)),
        queue       = get_apps(TopDir)
@@ -465,10 +467,12 @@ run_tc(S, _)             -> S#s{status = ?YATSY_ERROR, error = ?EMSG_NO_TC}.
 %%% Start running a Test Case. The Timeout is optional.
 %%%
 start_tc(#s{timeout = false, remote_node = N, config = Config} = S, TC) ->
-    Pid = yatsy_tc:run(N, suite_name(S), TC, Config),
+    Sconfig = ((S#s.current)#app.current)#suite.config,
+    Pid = yatsy_tc:run(N, suite_name(S), TC, Sconfig ++ Config),
     S#s{pid = Pid, timer_ref = false};
 start_tc(#s{timeout = Timeout, remote_node = N, config = Config} = S, TC) ->
-    Pid = yatsy_tc:run(N, suite_name(S), TC, Config),
+    Sconfig = ((S#s.current)#app.current)#suite.config,
+    Pid = yatsy_tc:run(N, suite_name(S), TC, Sconfig ++ Config),
     {ok, Tref} = timer:send_after(Timeout, {timeout_tc, Pid}),
     S#s{pid = Pid, timer_ref = Tref}.
 
@@ -629,7 +633,9 @@ get_config_param(EnvVar, Key, Config) ->
 	    end
     end.
 
-
+overwrite({K,V},[{K,_}|T]) -> [{K,V}|T];
+overwrite(E, [H|T])        -> [H | overwrite(E, T)];
+overwrite(E, [])           -> [E].
 
 config(Key, L, Default) ->
     case config(Key, L) of

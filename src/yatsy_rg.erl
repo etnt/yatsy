@@ -110,7 +110,8 @@ handle_cast({ts_is_finished, Finished, OutDir, Quit}, State) ->
     ?ilog("Wrote HTML output!~n", []),
     if (Quit == true) -> 
 	    ?ilog("Stopping yatsy...!~n", []),
-	    init:stop() 
+	    init:stop();
+       true -> false
     end,
     {noreply, State};
 %%

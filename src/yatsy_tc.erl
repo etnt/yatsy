@@ -7,7 +7,8 @@
 -export([run/4,
 	 suite_doc_and_load/2,
 	 suite_init/3,
-	 suite_tc/2
+	 suite_tc/2,
+	 local_call/3
 	]).
 
 -import(yatsy_ts, [l2a/1, a2l/1]).
@@ -126,9 +127,13 @@ get_loc() ->
     end.
 
 
-
+%%%
+%%% FIXME should have a wrapper function so that we can
+%%% pick up line numbers etc.
+%%%
 do_rpc(Node, Mod, Fun, Args) -> 
-    rpc:call(Node, l2a(Mod), l2a(Fun), Args).
+    %% rpc:call(Node, l2a(Mod), l2a(Fun), Args).
+    rpc:call(Node, ?MODULE, local_call, [l2a(Mod), l2a(Fun), Args]).
 
 
 
