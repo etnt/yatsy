@@ -7,6 +7,7 @@
 -export([run/4,
 	 suite_doc_and_load/2,
 	 suite_init/3,
+	 suite_fin/3,
 	 suite_tc/2,
 	 local_call/3
 	]).
@@ -60,8 +61,7 @@ do_suite_doc_and_load(_Pid, Node, Mod, Fun, Args) ->
     end.
 	
 %%%
-%%% Check if the module can be loaded and then
-%%% get the documentation for this suite.
+%%% Call the M:init_per_suite/1 function.
 %%%
 suite_init(Node, Mod, Config) -> 
     Self = self(),
@@ -71,6 +71,19 @@ do_suite_init(_Pid, Node, Mod, Fun, Args) ->
     case call(Node, Mod, Fun, Args) of
 	NewConf when list(NewConf) -> yatsy_ts:suite_init_reply({ok, NewConf});
 	Else                       -> yatsy_ts:suite_init_reply({error, Else})
+    end.
+	
+%%%
+%%% Call the M:fin_per_suite/1 function.
+%%%
+suite_fin(Node, Mod, Config) -> 
+    Self = self(),
+    spawn(fun() -> do_suite_fin(Self, Node, Mod, fin_per_suite, [Config]) end).
+
+do_suite_fin(_Pid, Node, Mod, Fun, Args) ->
+    case call(Node, Mod, Fun, Args) of
+	ok   -> yatsy_ts:suite_fin_reply(ok);
+	Else -> yatsy_ts:suite_fin_reply({error, Else})
     end.
 	
     

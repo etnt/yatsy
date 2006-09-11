@@ -5,8 +5,8 @@
 %%%-------------------------------------------------------------------
 -module(yatsy_SUITE).
 
-%% Note: This directive should only be used in test suites.
--compile(export_all).
+-export([init_per_suite/1, fin_per_suite/1, 
+	 init_per_testcase/2, fin_per_testcase/2]).
 
 -include("yatsy.hrl").
 
@@ -24,12 +24,12 @@ init_per_suite(Config) when list(Config) ->
     {ok, Config}.
 
 %%--------------------------------------------------------------------
-%% Function: end_per_suite(Config) -> _
+%% Function: fin_per_suite(Config) -> _
 %% Config - [tuple()]
 %%   A list of key/value pairs, holding the test case configuration.
 %% Description: Cleanup after the whole suite
 %%--------------------------------------------------------------------
-end_per_suite(_Config) ->
+fin_per_suite(_Config) ->
     ok.
 
 %%--------------------------------------------------------------------
@@ -49,14 +49,14 @@ init_per_testcase(_TestCase, Config) ->
     Config.
 
 %%--------------------------------------------------------------------
-%% Function: end_per_testcase(TestCase, Config) -> _
+%% Function: fin_per_testcase(TestCase, Config) -> _
 %% Case - atom()
 %%   Name of the test case that is about to be run.
 %% Config - [tuple()]
 %%   A list of key/value pairs, holding the test case configuration.
 %% Description: Cleanup after each test case
 %%--------------------------------------------------------------------
-end_per_testcase(_TestCase, _Config) ->
+fin_per_testcase(_TestCase, _Config) ->
     ok.
 
 %%--------------------------------------------------------------------

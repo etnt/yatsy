@@ -2,11 +2,35 @@
 %%% Created :  4 Sep 2006 by Torbjorn Tornkvist <tobbe@sej.hq.kred>
 %%% Descr.  : (yatsy) Yet Another Test Server - Yaws compatible 
 %%%
+%%% @copyright 2006 Torbjörn Törnkvist
+%%% @author Torbjörn Törnkvist <tobbe@tornkvist.org>
 %%% @doc YATSY: Yet Another Test Server - Yaws compatible 
 %%%     
-%%% <p>Yatsy is a simple test framework for testing your Erlang code.</p>
+%%% Yatsy is a simple test framework for testing your Erlang code.
+%%% It makes it possible to execute test suites according to a
+%%% defined structure and format, presenting the result either
+%%% dynamically (via Yaws) or by generated HTML files.
 %%%
-%%% <p>Basically, what you do is:
+%%% A testcase is implemented by a function that you write.
+%%% You collect a number of such testcases in an Erlang module
+%%% which ends in: <b>_SUITE.erl</b>. You may have any number
+%%% of such test suite modules which you compile to beam files
+%%% located in your <i>ebin</i> directories.
+%%%
+%%% You start your system, add the code paths to Yatsy and Yaws
+%%% and start Yatsy. Yatsy will now automatically find all test
+%%% suite modules that exist as beam files in you code path.
+%%% Next you order Yatsy to run your test cases, suite by suite.
+%%% The result will be accessible by pointing a Web browser to:
+%%% <i>http://localhost:8888/yatsy.yaws</i> .
+%%%
+%%% It is possible to control the behaviour of Yatsy. This can
+%%% be done either via a list of {Key,Value} tuples, which is
+%%% provided at startup, or via shell environment variables.
+%%% The latter method makes it easy to write wrapper scripts
+%%% that can start your system and Yatsy. 
+%%%
+%%% Checklist, what you need to do:
 %%%   <ol>
 %%%     <li>Write Erlang code that tests the functionality 
 %%%         of your system.</li>
@@ -24,12 +48,10 @@
 %%%
 %%%     <li>Point a Web Browser to http://localhost:8888/yatsy.yaws
 %%%         and study the result from the test cases.</li>
-%%%
 %%%   </ol>
-%%% </p>
+%%% 
 %%%
 %%%
-%%% @author  Torbjörn Törnkvist <tobbe@tornkvist.org>
 %%% @end
 %%%-------------------------------------------------------------------
 -module(yatsy).
@@ -102,14 +124,18 @@ start() ->
 
 start(Config) ->
     yatsy_ts:start(Config),
-    yatsy_rg:start().
+    yatsy_rg:start(),
+    sleep(100),
+    start_yaws().
 
 start_link() ->
     start_link([]).
 
 start_link(Config) ->
     yatsy_ts:start_link(Config),
-    yatsy_rg:start_link().
+    yatsy_rg:start_link(),
+    sleep(100),
+    start_yaws().
 
 run() -> 
     yatsy_ts:run().

@@ -12,7 +12,7 @@
 	 run/0, clean/0, clean_and_run/0,
 	 suite_tc_reply/1,
 	 suite_doc_reply/1,
-	 suite_init_reply/1,
+	 suite_init_reply/1, suite_fin_reply/1,
 	 tc_run_reply/1,
 	 fail/0, fail/1,
 	 print_state/0, next_tc/0,
@@ -130,6 +130,9 @@ suite_doc_reply(Res) ->
 
 suite_init_reply(Res) ->
     gen_server:cast(?SERVER, {suite_init_reply, self(), Res}).
+
+suite_fin_reply(Res) ->
+    gen_server:cast(?SERVER, {suite_fin_reply, self(), Res}).
 
 tc_run_reply(Res) ->
     gen_server:cast(?SERVER, {tc_run_reply, self(), Res}).
@@ -304,9 +307,14 @@ handle_cast({suite_doc_reply, Pid, Res}, #s{pid = Pid} = State) ->
     {noreply, exec_tc(set_suite_doc(State#s{timer_ref = false}, Res))};
 %%
 handle_cast({suite_init_reply, Pid, Res}, #s{pid = Pid} = State) ->
-    ?dlog("got suite_doc_reply, Res=~p~n", [Res]),
+    ?dlog("got suite_init_reply, Res=~p~n", [Res]),
     cancel_timer(State),
     {noreply, exec_tc(set_suite_init(State#s{timer_ref = false}, Res))};
+%%
+handle_cast({suite_fin_reply, Pid, Res}, #s{pid = Pid} = State) ->
+    ?dlog("got suite_fin_reply, Res=~p~n", [Res]),
+    cancel_timer(State),
+    {noreply, exec_tc(set_suite_fin(State#s{timer_ref = false}, Res))};
 %%
 handle_cast({suite_tc_reply, Pid, Res}, #s{pid = Pid} = State) ->
     ?dlog("got suite_tc_reply, Res=~p~n", [Res]),
@@ -334,6 +342,10 @@ handle_info({timeout_suite_doc, Pid}, #s{pid = Pid} = State) ->
 handle_info({timeout_suite_init, Pid}, #s{pid = Pid} = State) ->
     ?dlog("timeout_suite_init~n", []),
     {noreply, exec_tc(set_suite_init(State, "timedout"))};
+%%
+handle_info({timeout_suite_fin, Pid}, #s{pid = Pid} = State) ->
+    ?dlog("timeout_suite_fin~n", []),
+    {noreply, exec_tc(set_suite_fin(State, "timedout"))};
 %%
 handle_info({timeout_suite_tc, Pid}, #s{pid = Pid} = State) ->
     ?dlog("timeout_suite_tc~n", []),
@@ -393,8 +405,14 @@ set_suite_init(#s{current = A} = S, {ok, Config})  ->
     S#s{current = A#app{current = Suite#suite{init = true, config = Config}}};
 set_suite_init(#s{current = A} = S, Res)  ->
     Suite = A#app.current,
-    ?ilog("Failed to run ~s:init_per_suite/1, reason: ~p~n", [Res]),
+    ?ilog("Failed to run ~s:init_per_suite/1, reason: ~p~n", [suite_name(S), Res]),
     S#s{current = A#app{current = Suite#suite{init = true, config = []}}}.
+
+set_suite_fin(S, ok)  ->
+    S;
+set_suite_fin(S, Res)  ->
+    ?ilog("Failed to run ~s:fin_per_suite/1, reason: ~p~n", [suite_name(S), Res]),
+    S.
 
 set_suite_tc(#s{current = A} = S, {ok, TCs}) when list(TCs)  ->
     Suite = A#app.current,
@@ -444,7 +462,7 @@ run_tc(#s{remote_node = N, current = #app{current = #suite{doc = false}}} = S) -
 %%
 run_tc(#s{remote_node = N, current = #app{current = #suite{init = false}}} = S) -> 
     %% Must be the second time we enter this suite, 
-    %% we need to call the init_per_suite/ function.
+    %% we need to call the init_per_suite/1 function.
     Pid =  yatsy_tc:suite_init(N, suite_name(S), S#s.config),
     {ok, Tref} = timer:send_after(?DEFAULT_TIMEOUT, {timeout_suite_init, Pid}),
     S#s{pid = Pid, timer_ref = Tref};
@@ -454,6 +472,14 @@ run_tc(#s{remote_node = N, current = #app{current = #suite{queue = false}}} = S)
     %% retrieving the Test Case names of the suite.
     Pid =  yatsy_tc:suite_tc(N, suite_name(S)),
     {ok, Tref} = timer:send_after(?DEFAULT_TIMEOUT, {timeout_suite_tc, Pid}),
+    S#s{pid = Pid, timer_ref = Tref};
+%%
+run_tc(#s{remote_node = N, current = #app{current = #suite{fin = true}}} = S) -> 
+    %% Must be the last time we enter this suite, so we 
+    %% need to call the fin_per_suite/1
+    Sconfig = ((S#s.current)#app.current)#suite.config,
+    Pid =  yatsy_tc:suite_fin(N, suite_name(S), Sconfig ++ S#s.config),
+    {ok, Tref} = timer:send_after(?DEFAULT_TIMEOUT, {timeout_suite_fin, Pid}),
     S#s{pid = Pid, timer_ref = Tref};
 run_tc(S) -> 
     %% Execute a Test Case in the suite.
@@ -527,6 +553,8 @@ next_tc(#app{finished = F, current = C, queue = []} = X) ->
 %%%
 next_tc(#suite{queue = false} = X) -> % no test cases retrieved yet
     {true, X};
+next_tc(#suite{current = false, queue = [], fin = false} = X) -> % setup M:fin_per_suite/1
+    {true, X#suite{fin = true}};
 next_tc(#suite{current = false, queue = []}) -> 
     false;
 next_tc(#suite{current = false, queue = [H|T]} = X) -> 
