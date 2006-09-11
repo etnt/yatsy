@@ -27,6 +27,7 @@
 	  path,                   % path to dir of beam file
 	  doc = false,            % suite doc string
 	  init = false,           % have xxx_SUITE:init_per_suite/1 been running ?
+	  fin = false,            % should xxx_SUITE:fin_per_suite/1 be called ?
 	  config = [],            % suite specific configuration           
 	  finished = [],          % list of #tc{}
 	  current = false,
