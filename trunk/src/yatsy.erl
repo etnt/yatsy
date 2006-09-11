@@ -22,15 +22,42 @@
 %%% suite modules that exist as beam files in you code path.
 %%% Next you order Yatsy to run your test cases, suite by suite.
 %%% The result will be accessible by pointing a Web browser to:
-%%% <i>http://localhost:8888/yatsy.yaws</i> .
+%%% <i>http://localhost:8888/yatsy.yaws</i> . 
 %%%
 %%% It is possible to control the behaviour of Yatsy. This can
 %%% be done either via a list of {Key,Value} tuples, which is
 %%% provided at startup, or via shell environment variables.
 %%% The latter method makes it easy to write wrapper scripts
-%%% that can start your system and Yatsy. 
+%%% that can start your system and Yatsy. You can configure:
+%%% 
+%%% <p><ol>
+%%%   <li>If Yatsy should quit automatically when finished.</li>
+%%%   <li>If the test cases should run on a remote Erlang node.</li>
+%%%   <li>If static HTML files should be produced with the result.</li>
+%%% </ol></p>
+%%% 
 %%%
-%%% Checklist, what you need to do:
+%%% There exist a number of predefined functions that will
+%%% be called in every test suite module (M). When a new
+%%% test suite starts, the function <b>M:init_per_suite/1</b>
+%%% will be called with the configuration lists (mentioned
+%%% above). This function can return a list of new test suite
+%%% specific configurations that each testcase in this particular
+%%% test suite will get. Before each test case is run, the function
+%%% <b>M:init_per_testcase/2</b> will be called. It takes the 
+%%% test case name as the first argument and the configuration
+%%% list as the second. Likewise, the corresponding functions
+%%% <b>M:fin_per_suite/1</b> and <b>M:fin_per_testcase/2</b>
+%%% will be called at the end.
+%%%
+%%% The names of the test cases are defined by the list of
+%%% atoms returned from <b>M:all(suite)</b>. A list of documentation
+%%% strings can be returned from <b>M:all(doc)</b>. Each test case
+%%% can also return a list of documentation strings via the 
+%%% test case function <b>M:TestCase(doc)</b>.
+%%% 
+%%% <p>Checklist, what you need to do:</p>
+%%% <p>
 %%%   <ol>
 %%%     <li>Write Erlang code that tests the functionality 
 %%%         of your system.</li>
@@ -39,17 +66,17 @@
 %%%
 %%%     <li>Make sure the xxx_SUITE.erl file is compiled.</li>
 %%%
-%%%     <li>Checkout and compile Yatsy.</li>
+%%%     <li>Checkout and compile Yatsy.<br><b>svn checkout http://yatsy.googlecode.com/svn/trunk/ yatsy</b></br></li>
 %%%
 %%%     <li>Start your system and make sure that the code path 
-%%%         includes the .../yatsy/ebin directory.</li>
+%%%         includes the .../yatsy/ebin and ...yaws/ebin directories.</li>
 %%%
 %%%     <li>Run: yatsy:quick().</li>
 %%%
 %%%     <li>Point a Web Browser to http://localhost:8888/yatsy.yaws
 %%%         and study the result from the test cases.</li>
 %%%   </ol>
-%%% 
+%%% </p>
 %%%
 %%%
 %%% @end
