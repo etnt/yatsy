@@ -9,7 +9,7 @@
 	 suite_init/3,
 	 suite_fin/3,
 	 suite_tc/2,
-	 local_call/3
+	 local_call/4
 	]).
 
 -import(yatsy_ts, [l2a/1, a2l/1]).
@@ -99,7 +99,7 @@ run(Node, Mod, TC, Config) ->
 do_run(_Pid, Node, Mod, #tc{name = Fun}, Config) ->
     case call(Node, Mod, init_per_testcase, [Fun, Config]) of
 	NewConfig when list(NewConfig) ->
-	    case call(Node, Mod, Fun, [NewConfig]) of
+	    case call(Config, Node, Mod, Fun, [NewConfig]) of
 		true -> 
 		    call(Node, Mod, fin_per_testcase, [Fun, NewConfig]),
 		    yatsy_ts:tc_run_reply(ok);
@@ -112,11 +112,22 @@ do_run(_Pid, Node, Mod, #tc{name = Fun}, Config) ->
     end.
     
 
-call(false, Mod, Fun, Args) -> local_call(Mod, Fun, Args);
-call(Node, Mod, Fun, Args)  -> do_rpc(Node, Mod, Fun, Args).
+call(Node, Mod, Fun, Args) -> 
+    call([], Node, Mod, Fun, Args).
+
+call(Config, false, Mod, Fun, Args) -> local_call(iact(Config), Mod, Fun, Args);
+call(Config, Node, Mod, Fun, Args)  -> do_rpc(iact(Config), Node, Mod, Fun, Args).
 
 
-local_call(Mod, Fun, Args) ->
+iact(Config) -> 
+    yatsy_ts:config(interactive, Config, false).
+
+local_call(Iact, Mod, Fun, Args) ->
+    if (Iact == false) -> % Yatsy is running in interactive mode ?
+	    group_leader(whereis(init), self());
+       true ->
+	    true
+    end,
     case catch apply(l2a(Mod), l2a(Fun), Args) of
 	{'EXIT', Reason} ->
 	    Loc = get_loc(),
@@ -144,9 +155,9 @@ get_loc() ->
 %%% FIXME should have a wrapper function so that we can
 %%% pick up line numbers etc.
 %%%
-do_rpc(Node, Mod, Fun, Args) -> 
+do_rpc(Iact, Node, Mod, Fun, Args) -> 
     %% rpc:call(Node, l2a(Mod), l2a(Fun), Args).
-    rpc:call(Node, ?MODULE, local_call, [l2a(Mod), l2a(Fun), Args]).
+    rpc:call(Node, ?MODULE, local_call, [Iact, l2a(Mod), l2a(Fun), Args]).
 
 
 
