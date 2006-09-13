@@ -41,6 +41,10 @@ fin_per_suite(_Config) ->
 %%
 %% Description: Initiation before each test case
 %%
+%% A special Yatsy value: {timeout, MilliSec} can be included
+%% in the returned config list. It will set the timeout value
+%% for this particular test case to: MilliSec , as specified.
+%%
 %% Note: This function is free to add any key/value pairs to the Config
 %% variable, but should NOT alter/remove any existing entries.
 %% Description: Initiation before each test case

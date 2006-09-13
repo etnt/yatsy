@@ -15,6 +15,7 @@
 	 suite_doc_reply/1,
 	 suite_init_reply/1, suite_fin_reply/1,
 	 tc_run_reply/1,
+	 tc_new_timeout/1,
 	 fail/0, fail/1,
 	 print_state/0, next_tc/0,
 	 get_finished/0,
@@ -150,6 +151,9 @@ suite_fin_reply(Res) ->
 
 tc_run_reply(Res) ->
     gen_server:cast(?SERVER, {tc_run_reply, self(), Res}).
+
+tc_new_timeout(Timeout) when integer(Timeout) ->
+    gen_server:cast(?SERVER, {tc_new_timeout, Timeout, self()}).
 
 
 
@@ -378,6 +382,12 @@ handle_cast({suite_tc_reply, Pid, Res}, #s{pid = Pid} = State) ->
     ?dlog("got suite_tc_reply, Res=~p~n", [Res]),
     cancel_timer(State),
     {noreply, exec_tc(set_suite_tc(State#s{timer_ref = false}, Res))};
+%%
+handle_cast({tc_new_timeout, Timeout, Pid}, #s{pid = Pid} = State) ->
+    ?dlog("got new_timeout_tc: ~p~n", [Timeout]),
+    cancel_timer(State),
+    {ok, Tref} = timer:send_after(Timeout, {timeout_tc, Pid}),
+    {noreply, State#s{timer_ref = Tref}};
 %%
 handle_cast(print_state, State) ->
     io:format("~n~p~n", [State]),
