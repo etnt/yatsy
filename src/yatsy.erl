@@ -150,10 +150,13 @@ start() ->
     start([]).
 
 start(Config) ->
-    yatsy_ts:start(Config),
-    yatsy_rg:start(),
-    sleep(100),
-    start_yaws().
+    %% Spawn us free from shell etc...
+    spawn(fun() ->
+		  yatsy_ts:start(Config),
+		  yatsy_rg:start(),
+		  sleep(100),
+		  start_yaws()
+	  end).
 
 start_link() ->
     start_link([]).

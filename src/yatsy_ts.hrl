@@ -29,6 +29,7 @@
 	  init = false,           % have xxx_SUITE:init_per_suite/1 been running ?
 	  fin = false,            % should xxx_SUITE:fin_per_suite/1 be called ?
 	  config = [],            % suite specific configuration           
+	  tcs_only = false,       % list of tc_names if only those should run
 	  finished = [],          % list of #tc{}
 	  current = false,
 	  queue = false           % list of #tc{}

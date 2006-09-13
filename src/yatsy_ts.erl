@@ -9,7 +9,8 @@
 %% API
 -export([start/0, start_link/0, start/1, start_link/1,
 	 setup/1, foreach_tc/2,
-	 run/0, clean/0, clean_and_run/0,
+	 run/0, run/1, run/2, run/3, 
+	 clean/0, clean_and_run/0,
 	 suite_tc_reply/1,
 	 suite_doc_reply/1,
 	 suite_init_reply/1, suite_fin_reply/1,
@@ -19,7 +20,8 @@
 	 get_finished/0,
 	 yaws_docroot/0, yaws_host/0, yaws_port/0, yaws_listen/0,
 	 l2a/1, a2l/1,
-	 out_dir/0, get_status/0
+	 out_dir/0, get_status/0,
+	 config/3
 	]).
 
 -export([test/0]).
@@ -46,7 +48,9 @@
 	  config = ?DEFAULT_CONF,     % Any external configuration {Key,Value} tuples
 	  out_dir = ".",              % Where to put all output from Yatsy
 	  quit = false,               % Quit when finished
+	  interactive = false,        % Running in interactive mode
 	  gen_html = false,           % Generate HTML content when finished
+	  all_apps = [],
 	  finished = [],              % list of #app{}
 	  current = false,            % #app{}
 	  queue = []                  % list of #app{}
@@ -80,6 +84,16 @@ start_link(Config) when list(Config) ->
 
 run() ->
     gen_server:call(?SERVER, run, infinity).
+
+run(App) ->
+    gen_server:call(?SERVER, {run, App}, infinity).
+
+run(App, Suite) ->
+    gen_server:call(?SERVER, {run, App, Suite}, infinity).
+
+run(App, Suite, TC) ->
+    gen_server:call(?SERVER, {run, App, Suite, TC}, infinity).
+
 
 clean() ->
     gen_server:call(?SERVER, clean, infinity).
@@ -158,14 +172,19 @@ init(Config) when list(Config) ->
 setup(Config) ->
     TopDir = get_top_dir(Config),
     OutDir = get_output_dir(Config),
-    NewConfig = overwrite({output_dir, OutDir}, Config),
+    Config2 = overwrite({output_dir, OutDir}, Config),
+    Iact = l2bool(get_interactive(Config)),
+    Config3 = overwrite({interactive, Iact}, Config2),
+    Apps = get_apps(TopDir),
     #s{top_dir     = TopDir,
        out_dir     = OutDir,
        gen_html    = l2bool(get_generate_html(Config)),
-       config      = NewConfig,
+       config      = Config3,
        quit        = l2bool(get_quit_when_finished(Config)),
+       interactive = Iact,
        remote_node = l2a(get_remote_node(Config)),
-       queue       = get_apps(TopDir)
+       all_apps    = Apps,
+       queue       = Apps
       }.
 
 remote_node_check(#s{remote_node = false} = State) ->
@@ -249,16 +268,55 @@ get_yatsy_modules() ->
 %%                                      {stop, Reason, State}
 %% Description: Handling call messages
 %%--------------------------------------------------------------------
-handle_call(run, _From, State) when State#s.status == ?YATSY_IDLE ->
-    ?ilog("Yatsy starting...~n", []),
-    {reply, ok, exec_tc(State)};
 handle_call(run, _From, State) when State#s.status == ?YATSY_RUNNING ->
     {reply, {error, "already running"}, State};
+handle_call(run, _From, State) ->
+    ?ilog("Yatsy starting...~n", []),
+    NewState = State#s{finished = [], current = false, queue = State#s.all_apps},
+    {reply, ok, exec_tc(NewState)};
 %%
-handle_call(clean, _From, State) when State#s.status == ?YATSY_IDLE ->
-    {reply, ok, setup(State#s.config)};
+handle_call({run, _}, _From, State) when State#s.status == ?YATSY_RUNNING ->
+    {reply, {error, "already running"}, State};
+handle_call({run, A}, _From, State) ->
+    ?ilog("Yatsy starting App=~p ...~n", [A]),
+    case x_app(A, State#s.all_apps) of
+	{ok, App} ->
+	    NewState = State#s{finished = [], current = false, queue = [App]},
+	    {reply, ok, exec_tc(NewState)};
+	_ ->
+	    {reply, {error, "App not found"}, State}
+    end;
+%%
+handle_call({run, _, _}, _From, State) when State#s.status == ?YATSY_RUNNING ->
+    {reply, {error, "already running"}, State};
+handle_call({run,A,S}, _From, State) ->
+    ?ilog("Yatsy starting App=~p , Suite=~p ...~n", [A,S]),
+    case x_suite(A, S, State#s.all_apps) of
+	{ok, Suite} ->
+	    App = #app{name = A, queue = [Suite#suite{tcs_only = false}]},
+	    NewState = State#s{finished = [], current = false, queue = [App]},
+	    {reply, ok, exec_tc(NewState)};
+	_ ->
+	    {reply, {error, "Suite not found"}, State}
+    end;
+%%
+handle_call({run, _, _, _}, _From, State) when State#s.status == ?YATSY_RUNNING ->
+    {reply, {error, "already running"}, State};
+handle_call({run,A,S,T}, _From, State) ->
+    ?ilog("Yatsy starting App=~p , Suite=~p , TC=~p ...~n", [A,S,T]),
+    case x_suite(A, S, State#s.all_apps) of
+	{ok, Suite} ->
+	    App = #app{name = A, queue = [Suite#suite{tcs_only = [l2a(T)]}]},
+	    NewState = State#s{finished = [], current = false, queue = [App]},
+	    {reply, ok, exec_tc(NewState)};
+	_ ->
+	    {reply, {error, "Suite not found"}, State}
+    end;
+%%
 handle_call(clean, _From, State) when State#s.status == ?YATSY_RUNNING ->
     {reply, {error, "already running"}, State};
+handle_call(clean, _From, State) ->
+    {reply, ok, setup(State#s.config)};
 %%
 handle_call(get_finished, _From, State) ->
     {reply, {ok, State#s.finished}, State};
@@ -351,6 +409,10 @@ handle_info({timeout_suite_tc, Pid}, #s{pid = Pid} = State) ->
     ?dlog("timeout_suite_tc~n", []),
     {noreply, exec_tc(set_suite_tc(State, []))};
 %%
+handle_info({timeout_tc, Pid}, #s{pid = Pid} = State) ->
+    ?dlog("timeout_tc~n", []),
+    {noreply, exec_tc(set_tc_rc(State, "timedout"))};
+%%
 handle_info(_Info, State) ->
     ?ilog("handle_info got: ~p~n", [_Info]),
     {noreply, State}.
@@ -375,6 +437,22 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
+
+x_app(Name, [#app{name = Name} = A | _]) -> {ok,A};
+x_app(Name, [_|T])                       -> x_app(Name, T);
+x_app(_, [])                             -> {error, "not found"}.
+
+x_suite(Aname, Sname, L) ->
+    case x_app(Aname, L) of
+	{ok, A} -> x_suite(Sname, A#app.queue);
+	Else    -> Else
+    end.
+
+x_suite(Name, [#suite{name = Name} = S | _]) -> {ok,S};
+x_suite(Name, [_|T])                         -> x_suite(Name, T);
+x_suite(_, [])                               -> {error, "not found"}.
+
+
 
 default_docroot() ->
     filename:join(
@@ -453,30 +531,34 @@ finished(S) ->
 
 
 %%
-run_tc(#s{remote_node = N, current = #app{current = #suite{doc = false}}} = S) -> 
+run_tc(#s{remote_node = N, current = #app{current = #suite{name = M, doc = false}}} = S) -> 
     %% Must be first time we enter this suite, so we start off by
     %% retrieving the suite doc string.
+    ?ilog("retrieving suite: ~s doc string...~n", [M]),
     Pid =  yatsy_tc:suite_doc_and_load(N, suite_name(S)),
     {ok, Tref} = timer:send_after(?DEFAULT_TIMEOUT, {timeout_suite_doc, Pid}),
     S#s{pid = Pid, timer_ref = Tref};
 %%
-run_tc(#s{remote_node = N, current = #app{current = #suite{init = false}}} = S) -> 
+run_tc(#s{remote_node = N, current = #app{current = #suite{name = M, init = false}}} = S) -> 
     %% Must be the second time we enter this suite, 
     %% we need to call the init_per_suite/1 function.
+    ?ilog("calling ~s:init_per_suite/1 function...~n", [M]),
     Pid =  yatsy_tc:suite_init(N, suite_name(S), S#s.config),
     {ok, Tref} = timer:send_after(?DEFAULT_TIMEOUT, {timeout_suite_init, Pid}),
     S#s{pid = Pid, timer_ref = Tref};
 %%
-run_tc(#s{remote_node = N, current = #app{current = #suite{queue = false}}} = S) -> 
+run_tc(#s{remote_node = N, current = #app{current = #suite{name = M, queue = false}}} = S) -> 
     %% Must be the third time we enter this suite, so we continue by
     %% retrieving the Test Case names of the suite.
+    ?ilog("retrieving test cases for suite: ~s ...~n", [M]),
     Pid =  yatsy_tc:suite_tc(N, suite_name(S)),
     {ok, Tref} = timer:send_after(?DEFAULT_TIMEOUT, {timeout_suite_tc, Pid}),
     S#s{pid = Pid, timer_ref = Tref};
 %%
-run_tc(#s{remote_node = N, current = #app{current = #suite{fin = true}}} = S) -> 
+run_tc(#s{remote_node = N, current = #app{current = #suite{name = M, fin = true}}} = S) -> 
     %% Must be the last time we enter this suite, so we 
     %% need to call the fin_per_suite/1
+    ?ilog("calling ~s:fin_per_suite/1 function...~n", [M]),
     Sconfig = ((S#s.current)#app.current)#suite.config,
     Pid =  yatsy_tc:suite_fin(N, suite_name(S), Sconfig ++ S#s.config),
     {ok, Tref} = timer:send_after(?DEFAULT_TIMEOUT, {timeout_suite_fin, Pid}),
@@ -558,13 +640,24 @@ next_tc(#suite{current = false, queue = [], fin = false} = X) -> % setup M:fin_p
 next_tc(#suite{current = false, queue = []}) -> 
     false;
 next_tc(#suite{current = false, queue = [H|T]} = X) -> 
-    {true, X#suite{current = H, queue = T}};
+    case tc_ok(H, X#suite.tcs_only) of
+	true -> {true, X#suite{current = H, queue = T}};
+	_    -> next_tc(X#suite{current = H, queue = T})
+    end;
 next_tc(#suite{finished = F, current = C, queue = [H|T]} = X) -> 
-    {true, X#suite{finished =[C|F], current = H, queue = T}};
+    case tc_ok(H, X#suite.tcs_only) of
+	true -> {true, X#suite{finished =[C|F], current = H, queue = T}};
+	_    -> next_tc(X#suite{finished =[C|F], current = H, queue = T})
+    end;
 next_tc(#suite{finished = F, current = C, queue = []} = X) -> 
     {true, X#suite{finished =[C|F], current = false}}.
 
-
+%%% Check if it is ok to run this test case
+tc_ok(_, false)                   -> true;
+tc_ok(#tc{name = Name}, [Name|_]) -> true;
+tc_ok(TC, [_|T])                  -> tc_ok(TC, T);
+tc_ok(_, [])                      -> false.
+    
 
 get_apps(TopDir) -> 
     Paths = filter_code_path(TopDir),
@@ -649,6 +742,9 @@ get_generate_html(Config) ->
 
 get_quit_when_finished(Config) -> 
     get_config_param("YATSY_QUIT_WHEN_FINISHED", quit_when_finished, Config).
+
+get_interactive(Config) -> 
+    get_config_param("YATSY_INTERACTIVE", interactive, Config).
 
 
 get_config_param(EnvVar, Key, Config) -> 
