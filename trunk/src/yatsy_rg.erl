@@ -17,7 +17,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
 
--import(yatsy_ts, [a2l/1, l2a/1, n2l/1]).
+-import(yatsy_ts, [a2l/1, l2a/1, i2l/1, n2l/1]).
 -import(yaws_api, [ehtml_expand/1]).
 
 -include("yatsy_ts.hrl").
@@ -309,9 +309,26 @@ do_tc(_Url, App, Suite, Tc, Apps) ->
 				   {br, []},
 				   "ok"];
 			      {ok, #tc{rc = error} = T} ->
-				  ["(Description: ", {i, [], T#tc.doc}, ")",
-				   {br, []},
-				   lists:flatten(io_lib:format("~p", [T#tc.error]))];
+				  case T#tc.error of
+				      {error,{yatsy_exit,Loc,Error}} ->
+					  {_Mod, Line} = Loc,
+					  ["(Description: ", {i, [], T#tc.doc}, ")",
+					   {br, []},
+					   {b, [], ["Error occured in line: ", i2l(Line)]},
+					   {br, []},
+					   lists:flatten(io_lib:format("~p", [Error]))];
+				      {failed, Loc} ->
+					  {_Mod, Line} = Loc,
+					  ["(Description: ", {i, [], T#tc.doc}, ")",
+					   {br, []},
+					   {b, [], ["Error occured in line: ", i2l(Line)]},
+					   {br, []},
+					   "-- No crash info returned --"];
+				      _ ->
+					  ["(Description: ", {i, [], T#tc.doc}, ")",
+					   {br, []},
+					   lists:flatten(io_lib:format("~p", [T#tc.error]))]
+				  end;
 			      _ -> 
 				  "no test case found"
 			  end,
