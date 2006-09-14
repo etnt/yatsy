@@ -21,7 +21,7 @@
 	 get_finished/0,
 	 yaws_docroot/0, yaws_host/0, yaws_port/0, yaws_listen/0,
 	 l2a/1, a2l/1, i2l/1, n2l/1,
-	 out_dir/0, get_status/0,
+	 output_dir/0, get_status/0,
 	 config/3
 	]).
 
@@ -39,7 +39,7 @@
 -define(BOOL_P(B), ((B == true);(B == false))).
 
 -record(s, {
-	  status = ?YATSY_IDLE,       % idle | running 
+	  status = ?YATSY_IDLE,       % idle | running | finished
 	  top_dir,                    % Top directory
 	  remote_node = false,        % Run the test cases on this node
 	  pid = false,                % Current PID of running testcase
@@ -47,7 +47,7 @@
 	  timer_ref = false,          % Outstanding timeout timer reference
 	  error = false,              % Error reason when (status == ?YATSY_ERROR)
 	  config = ?DEFAULT_CONF,     % Any external configuration {Key,Value} tuples
-	  out_dir = ".",              % Where to put all output from Yatsy
+	  output_dir = ".",              % Where to put all output from Yatsy
 	  quit = false,               % Quit when finished
 	  interactive = false,        % Running in interactive mode
 	  gen_html = false,           % Generate HTML content when finished
@@ -132,8 +132,8 @@ yaws_port() ->
 yaws_listen() ->
     gen_server:call(?SERVER, yaws_listen, infinity).
 
-out_dir() ->
-    gen_server:call(?SERVER, out_dir, infinity).
+output_dir() ->
+    gen_server:call(?SERVER, output_dir, infinity).
 
 
 
@@ -175,21 +175,38 @@ init(Config) when list(Config) ->
 
 setup(Config) ->
     TopDir = get_top_dir(Config),
+    %%
     OutDir = get_output_dir(Config),
     Config2 = overwrite({output_dir, OutDir}, Config),
+    %%
     Iact = l2bool(get_interactive(Config)),
     Config3 = overwrite({interactive, Iact}, Config2),
+    %%
+    YawsHost = get_yaws_host(Config, default_host()),
+    Config4 = overwrite({yaws_host, YawsHost}, Config3),
+    %%
+    YawsPort = get_yaws_port(Config, default_port()),
+    Config5 = overwrite({yaws_port, YawsPort}, Config4),
+    %%
+    YawsListen = mk_listen(get_yaws_listen(Config, default_listen())),
+    Config6 = overwrite({yaws_listen, YawsListen}, Config5),
+    %%
     Apps = get_apps(TopDir),
     #s{top_dir     = TopDir,
-       out_dir     = OutDir,
+       output_dir  = OutDir,
        gen_html    = l2bool(get_generate_html(Config)),
-       config      = Config3,
+       config      = Config6,
        quit        = l2bool(get_quit_when_finished(Config)),
        interactive = Iact,
        remote_node = l2a(get_remote_node(Config)),
        all_apps    = Apps,
        queue       = Apps
       }.
+
+mk_listen(T) when tuple(T) -> T;
+mk_listen(L) when list(L) ->
+    [A,B,C,D] = string:tokens(L, "{}, "),
+    {list_to_integer(A),list_to_integer(B),list_to_integer(C),list_to_integer(D)}.
 
 remote_node_check(#s{remote_node = false} = State) ->
     ?ilog("yatsy_ts: Ready...~n", []),
@@ -344,8 +361,8 @@ handle_call(yaws_port, _From, State) ->
 handle_call(yaws_listen, _From, State) ->
     {reply, config(yaws_listen, State#s.config, default_listen()), State};
 %%
-handle_call(out_dir, _From, State) ->
-    {reply, {ok, State#s.out_dir}, State};
+handle_call(output_dir, _From, State) ->
+    {reply, {ok, State#s.output_dir}, State};
 %%
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -539,7 +556,7 @@ exec_tc(State) ->
 %%% Check if HTML should be generated
 finished(#s{status = ?YATSY_FINISHED, gen_html = true} = S) ->
     ?ilog("Yatsy finished!~n", []),
-    yatsy_rg:ts_is_finished(S#s.finished, S#s.out_dir, S#s.quit),
+    yatsy_rg:ts_is_finished(S#s.finished, S#s.output_dir, S#s.quit),
     S;
 finished(S) ->
     S.
@@ -768,9 +785,28 @@ get_quit_when_finished(Config) ->
 get_interactive(Config) -> 
     get_config_param("YATSY_INTERACTIVE", interactive, Config).
 
+get_yaws_host(Config, Default) -> 
+    get_config_param("YATSY_YAWS_HOST", yaws_host, Config, Default).
+
+get_yaws_port(Config, Default) -> 
+    get_config_param("YATSY_YAWS_PORT", yaws_port, Config, Default).
+
+get_yaws_listen(Config, Default) -> 
+    get_config_param("YATSY_YAWS_LISTEN", yaws_listen, Config, Default).
+
 
 get_config_param(EnvVar, Key, Config) -> 
     case config(Key, Config) of
+	{ok, Value} -> Value;
+	_ ->
+	    case os:getenv(EnvVar) of
+		false -> false;   
+		Value -> Value
+	    end
+    end.
+
+get_config_param(EnvVar, Key, Config, Default) -> 
+    case config(Key, Config, Default) of
 	{ok, Value} -> Value;
 	_ ->
 	    case os:getenv(EnvVar) of
