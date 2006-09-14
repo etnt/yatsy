@@ -385,7 +385,7 @@ handle_cast({suite_tc_reply, Pid, Res}, #s{pid = Pid} = State) ->
 %%
 handle_cast({tc_new_timeout, Timeout, Pid}, #s{pid = Pid} = State) ->
     ?ilog("got new timeout: ~p for Test Case: ~p~n", 
-	  [Timeout,tc_name(State)]),
+	  [Timeout,app_suite_tc_name(State)]),
     cancel_timer(State),
     {ok, Tref} = timer:send_after(Timeout, {timeout_tc, Pid}),
     {noreply, State#s{timer_ref = Tref}};
@@ -521,8 +521,10 @@ set_tc_rc(#s{current = A} = S, Else) ->
     NewTC = TC#tc{rc = error, error = Else},
     S#s{current = A#app{current = Suite#suite{current = NewTC}}}.
 
-tc_name(#app{current = #suite{current = #tc{name = Name}}}) -> Name;
-tc_name(_)                                                  -> "".
+app_suite_tc_name(#app{name = A, current = #suite{name = S, current = #tc{name = T}}}) ->
+    A++"/"++S++"/"++T;
+app_suite_tc_name(_) ->
+    "".
 
 %%%
 %%% The Test Server Engine
