@@ -101,7 +101,7 @@ do_run(_Pid, Node, Mod, #tc{name = Fun}, Config) ->
 	NewConfig when list(NewConfig) ->
 	    new_timeout(NewConfig),
 	    case call(Config, Node, Mod, Fun, [NewConfig]) of
-		true -> 
+		Res when Res == true; Res == ok -> 
 		    call(Node, Mod, fin_per_testcase, [Fun, NewConfig]),
 		    yatsy_ts:tc_run_reply(ok);
 		Else -> 
@@ -114,7 +114,7 @@ do_run(_Pid, Node, Mod, #tc{name = Fun}, Config) ->
     
 new_timeout(Config) ->
     case yatsy_ts:config(timeout, Config, false) of
-	{ok, Timeout} when integer(Timeout) ->
+	Timeout when integer(Timeout) ->
 	    yatsy_ts:tc_new_timeout(Timeout);
 	_ ->
 	    false
