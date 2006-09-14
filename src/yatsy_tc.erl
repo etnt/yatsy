@@ -26,7 +26,7 @@ suite_tc(Node, Mod) ->
 
 do_suite_tc(_Pid, Node, Mod, Fun, Args) ->
     case call(Node, Mod, Fun, Args) of
-	Ts when list(Ts) -> 
+	{_, Ts} when list(Ts) -> 
 	    Res = [get_tc_doc(Node, Mod, #tc{name = Tname}) || Tname <- Ts],
 	    yatsy_ts:suite_tc_reply({ok, Res});
 	Else -> 
@@ -35,8 +35,8 @@ do_suite_tc(_Pid, Node, Mod, Fun, Args) ->
     
 get_tc_doc(Node, Mod, #tc{name = Tname} = TC) ->
     case call(Node, Mod, Tname, [doc]) of
-	Doc when list(Doc) -> TC#tc{doc = Doc};
-	_                  -> TC   % ignore the doc string
+	{_, Doc} when list(Doc) -> TC#tc{doc = Doc};
+	_                       -> TC   % ignore the doc string
     end.
 
 %%%
@@ -50,10 +50,10 @@ suite_doc_and_load(Node, Mod) ->
 do_suite_doc_and_load(_Pid, Node, Mod, Fun, Args) ->
     call(Node, code, purge, [Mod]),
     case call(Node, code, load_file, [Mod]) of
-	{module, Mod} ->
+	{_, {module, Mod}} ->
 	    case call(Node, Mod, Fun, Args) of
-		[Str] when list(Str) -> yatsy_ts:suite_doc_reply({ok, Str});
-		Else                 -> yatsy_ts:suite_doc_reply({error, Else})
+		{_, [Str]} when list(Str) -> yatsy_ts:suite_doc_reply({ok, Str});
+		Else                      -> yatsy_ts:suite_doc_reply({error, Else})
 	    end;
 	_ ->
 	    Emsg = "(yatsy) failed to load module: "++a2l(Mod),
@@ -69,8 +69,8 @@ suite_init(Node, Mod, Config) ->
 
 do_suite_init(_Pid, Node, Mod, Fun, Args) ->
     case call(Node, Mod, Fun, Args) of
-	NewConf when list(NewConf) -> yatsy_ts:suite_init_reply({ok, NewConf});
-	Else                       -> yatsy_ts:suite_init_reply({error, Else})
+	{_, NewConf} when list(NewConf) -> yatsy_ts:suite_init_reply({ok, NewConf});
+	Else                            -> yatsy_ts:suite_init_reply({error, Else})
     end.
 	
 %%%
@@ -82,8 +82,8 @@ suite_fin(Node, Mod, Config) ->
 
 do_suite_fin(_Pid, Node, Mod, Fun, Args) ->
     case call(Node, Mod, Fun, Args) of
-	ok   -> yatsy_ts:suite_fin_reply(ok);
-	Else -> yatsy_ts:suite_fin_reply({error, Else})
+	{_, ok}   -> yatsy_ts:suite_fin_reply(ok);
+	Else      -> yatsy_ts:suite_fin_reply({error, Else})
     end.
 	
     
@@ -98,12 +98,12 @@ run(Node, Mod, TC, Config) ->
 
 do_run(_Pid, Node, Mod, #tc{name = Fun}, Config) ->
     case call(Node, Mod, init_per_testcase, [Fun, Config]) of
-	NewConfig when list(NewConfig) ->
+	{_, NewConfig} when list(NewConfig) ->
 	    new_timeout(NewConfig),
 	    case call(Config, Node, Mod, Fun, [NewConfig]) of
-		Res when Res == true; Res == ok -> 
+		{Time, Res} when Res == true; Res == ok -> 
 		    call(Node, Mod, fin_per_testcase, [Fun, NewConfig]),
-		    yatsy_ts:tc_run_reply(ok);
+		    yatsy_ts:tc_run_reply({ok, Time});
 		Else -> 
 		    call(Node, Mod, fin_per_testcase, [Fun, NewConfig]),
 		    yatsy_ts:tc_run_reply({error, Else})
@@ -136,17 +136,15 @@ local_call(Iact, Mod, Fun, Args) ->
        true ->
 	    true
     end,
-    case catch apply(l2a(Mod), l2a(Fun), Args) of
-	{'EXIT', Reason} ->
+    case catch timer:tc(l2a(Mod), l2a(Fun), Args) of
+	{_Time, {'EXIT', Reason}} ->
 	    Loc = get_loc(),
 	    {yatsy_exit, Loc, Reason};
-	false ->
+	{_Time, false} ->
 	    Loc = get_loc(),
 	    {failed, Loc};
-	true ->
-	    true;
 	Else ->
-	    Else      % to make 'init_per_testcase' work
+	    Else
     end.
 	
 %%%

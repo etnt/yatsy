@@ -19,7 +19,8 @@
 	  name,                   % name of test case (a function name)
 	  doc = "",               % test case doc string
 	  rc = false,             % false | true | error
-	  error = ""              % string: error output (when rc == error)
+	  error = "",             % string: error output (when rc == error)
+	  time = -1               % running time
 	 }).
 
 -record(suite, {
