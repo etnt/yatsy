@@ -17,7 +17,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
 
--import(yatsy_ts, [a2l/1, l2a/1]).
+-import(yatsy_ts, [a2l/1, l2a/1, n2l/1]).
 -import(yaws_api, [ehtml_expand/1]).
 
 -include("yatsy_ts.hrl").
@@ -278,10 +278,13 @@ do_suite(Url, App, Suite, Apps) ->
 	{ok, A} ->
 	    case get_suite(Suite, A#app.finished) of
 		{ok, S} ->
-		    TDs = [[mk_link(Url, "tc", a2l(Tname)), a2l(RC), Doc] || 
-			      #tc{name = Tname, doc = Doc, rc = RC} <- S#suite.finished],
+		    TDs = [[mk_link(Url, "tc", a2l(Tname)), a2l(RC), 
+			    f2s(Time/1000), Doc] || 
+			      #tc{name = Tname, doc = Doc, 
+				  rc = RC, time = Time} <- S#suite.finished],
 		    {'div', [{id, "yatsy_suite"}],
-		     yatsy_ehtml:table(["Test case","Result","Description"],TDs)};
+		     yatsy_ehtml:table(["Test case","Result",
+					"Time (ms)", "Description"],TDs)};
 		_ ->
 		    {'div', [{id, "yatsy_error"}],
 		     "no suite found"}
@@ -290,6 +293,10 @@ do_suite(Url, App, Suite, Apps) ->
 	    {'div', [{id, "yatsy_error"}],
 	     "no application found"}
     end.
+
+%% Float to String
+f2s(F) when float(F)  -> hd(io_lib:format("~.2f", [F]));
+f2s(X) when number(X) -> n2l(X).
 
 do_tc(_Url, App, Suite, Tc, Apps) ->
     case get_app(App, Apps) of

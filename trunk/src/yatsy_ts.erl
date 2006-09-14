@@ -20,7 +20,7 @@
 	 print_state/0, next_tc/0,
 	 get_finished/0,
 	 yaws_docroot/0, yaws_host/0, yaws_port/0, yaws_listen/0,
-	 l2a/1, a2l/1,
+	 l2a/1, a2l/1, i2l/1, n2l/1,
 	 out_dir/0, get_status/0,
 	 config/3
 	]).
@@ -511,10 +511,10 @@ set_suite_tc(#s{current = A} = S, _) ->
     S#s{current = A#app{current = Suite#suite{queue = []}}}.
 
 
-set_tc_rc(#s{current = A} = S, ok) ->
+set_tc_rc(#s{current = A} = S, {ok, Time}) ->
     Suite = A#app.current,
-    TC = Suite#suite.current,
-    S#s{current = A#app{current = Suite#suite{current = TC#tc{rc = ok, error = ""}}}};
+    TC = (Suite#suite.current)#tc{rc = ok, error = "", time = Time},
+    S#s{current = A#app{current = Suite#suite{current = TC}}};
 set_tc_rc(#s{current = A} = S, Else) ->
     Suite = A#app.current,
     TC = Suite#suite.current,
@@ -733,6 +733,13 @@ l2a(A) when atom(A) -> A.
 
 a2l(A) when atom(A) -> atom_to_list(A);
 a2l(L) when list(L) -> L.
+
+i2l(I) when integer(I) -> integer_to_list(I);
+i2l(L) when list(L)    -> L.
+
+n2l(I) when integer(I) -> integer_to_list(I);
+n2l(F) when float(F)   -> float_to_list(F);
+n2l(L) when list(L)    -> L.
 
 l2bool("true") -> true;
 l2bool(true)   -> true;
