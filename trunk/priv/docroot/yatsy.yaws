@@ -1,8 +1,5 @@
 <erl>
 out(A) ->
-    %%
-    %% Example use of the yatsy_rg API !
-    %%
     App   = yaws_api:getvar(A,"app"),
     Suite = yaws_api:getvar(A,"suite"),
     TC    = yaws_api:getvar(A,"tc"),
@@ -11,28 +8,36 @@ out(A) ->
 
 dispatch(undefined, undefined, undefined) ->
     {ehtml,
-     html([{h1, [], "The Application Page"},
+     html([yatsy_info(),
+	   {h1, [], "The Application Page"},
 	   yatsy:top("yatsy.yaws")])};
 %%
 dispatch({ok,App}, undefined, undefined) ->
     {ehtml,
-     html([{h1, [], "Test Suites in application: "++App},
+     html([yatsy_info(),
+	   {h1, [], "Test Suites in application: "++App},
 	   yatsy:app("yatsy.yaws?app="++App, App)])};
 %%
 dispatch({ok,App}, {ok, Suite}, undefined) ->
     {ehtml,
-     html([{h1, [], "Test Cases in test suite: "++App++"/"++Suite},
+     html([yatsy_info(),
+	   {h1, [], "Test Cases in test suite: "++App++"/"++Suite},
 	   yatsy:suite("yatsy.yaws?app="++App++"&suite="++Suite, App, Suite)])};
 %%
 dispatch({ok,App}, {ok, Suite}, {ok, TC}) ->
     {ehtml,
-     html([{h1, [], "Test Case: "++App++"/"++Suite++"/"++TC},
+     html([yatsy_info(),
+	   {h1, [], "Test Case: "++App++"/"++Suite++"/"++TC},
 	   yatsy:tc("yatsy.yaws?app="++App++"&suite="++Suite++"&tc="++TC, 
 		    App, Suite, TC)])};
 %%
 dispatch(_, _, _) ->
     {ehtml,
      html([{p, [], "ERROR: Wrong query argument input!"}])}.
+
+yatsy_info() ->
+    {ok, Status} = yatsy_ts:get_status(),
+    {h1, [], "Yatsy server status: " ++ yatsy_ts:a2l(Status)}.
 
 html(Body) ->
     yatsy_rg:html(Body).

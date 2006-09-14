@@ -104,7 +104,7 @@ test() ->
 %%%
 start_yaws() ->
     DocRoot = yatsy_ts:yaws_docroot(),
-    {ok, OutDir}  = yatsy_ts:out_dir(),
+    {ok, OutDir}  = yatsy_ts:output_dir(),
     Host    = yatsy_ts:yaws_host(),
     Port    = yatsy_ts:yaws_port(),
     Listen  = yatsy_ts:yaws_listen(),
