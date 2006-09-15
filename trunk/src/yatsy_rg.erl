@@ -311,23 +311,11 @@ do_tc(_Url, App, Suite, Tc, Apps) ->
 			      {ok, #tc{rc = error} = T} ->
 				  case T#tc.error of
 				      {error,{yatsy_exit,Loc,Error}} ->
-					  {_Mod, Line} = Loc,
-					  ["(Description: ", {i, [], T#tc.doc}, ")",
-					   {br, []},
-					   {b, [], ["Error occured in line: ", i2l(Line)]},
-					   {br, []},
-					   lists:flatten(io_lib:format("~p", [Error]))];
+					  mk_desc(T, Loc, Error);
 				      {failed, Loc} ->
-					  {_Mod, Line} = Loc,
-					  ["(Description: ", {i, [], T#tc.doc}, ")",
-					   {br, []},
-					   {b, [], ["Error occured in line: ", i2l(Line)]},
-					   {br, []},
-					   "-- No crash info returned --"];
+					  mk_desc(T, Loc, false);
 				      _ ->
-					  ["(Description: ", {i, [], T#tc.doc}, ")",
-					   {br, []},
-					   lists:flatten(io_lib:format("~p", [T#tc.error]))]
+					  mk_desc(T, false, false)
 				  end;
 			      _ -> 
 				  "no test case found"
@@ -342,6 +330,26 @@ do_tc(_Url, App, Suite, Tc, Apps) ->
 	     "no application found"}
     end.
 
+
+mk_desc(T, false, false) ->
+    ["(Description: ", {i, [], T#tc.doc}, ")",
+     {br, []},
+     lists:flatten(io_lib:format("~p", [T#tc.error]))];
+mk_desc(T, Loc, false) ->
+    {_Mod, Line} = Loc,
+    mk_desc2(T#tc.doc, Line) ++
+	["-- No crash info returned --"];
+mk_desc(T, Loc, Error) ->
+    {_Mod, Line} = Loc,
+    mk_desc2(T#tc.doc, Line) ++
+	lists:flatten(io_lib:format("~p", [Error])).
+
+mk_desc2(Doc, Line) ->
+    ["(Description: ", {i, [], Doc}, ")",
+     {br, []},
+     {b, [], ["Error occured in line: ", i2l(Line)]},
+     {br, []}].
+    
 
 get_app(App, [#app{name = App} = H|_]) -> {ok, H};
 get_app(App, [_|T])                    -> get_app(App, T);
