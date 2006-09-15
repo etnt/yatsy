@@ -108,7 +108,8 @@ start_yaws() ->
     Host    = yatsy_ts:yaws_host(),
     Port    = yatsy_ts:yaws_port(),
     Listen  = yatsy_ts:yaws_listen(),
-    SL = [{host, Host}, {port, Port}, {listen, Listen}],
+    SL = [{servername, Host}, {port, Port}, 
+	  {listen, Listen}],
     GL = [{logdir, OutDir}],
     yaws:start_embedded(DocRoot, SL, GL).
 
