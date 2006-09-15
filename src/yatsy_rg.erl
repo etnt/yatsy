@@ -334,19 +334,22 @@ do_tc(_Url, App, Suite, Tc, Apps) ->
 mk_desc(T, false, false) ->
     ["(Description: ", {i, [], T#tc.doc}, ")",
      {br, []},
-     lists:flatten(io_lib:format("~p", [T#tc.error]))];
+     {pre, [],
+      [lists:flatten(io_lib:format("~p", [T#tc.error]))]}];
 mk_desc(T, false, Error) ->
     ["(Description: ", {i, [], T#tc.doc}, ")",
      {br, []},
      {b, [], ["No line info found!"]},
      {br, []},
-     lists:flatten(io_lib:format("~p", [Error]))];
+     {pre, [],
+      [lists:flatten(io_lib:format("~p", [Error]))]}];
 mk_desc(T, {_Mod, Line}, false) ->
     mk_desc2(T#tc.doc, Line) ++
 	["-- No crash info returned --"];
 mk_desc(T, {_Mod, Line}, Error) ->
     mk_desc2(T#tc.doc, Line) ++
-	lists:flatten(io_lib:format("~p", [Error])).
+	[{pre, [],
+	  [lists:flatten(io_lib:format("~p", [Error]))]}].
 
 mk_desc2(Doc, Line) ->
     ["(Description: ", {i, [], Doc}, ")",
