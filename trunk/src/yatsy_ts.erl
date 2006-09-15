@@ -810,7 +810,7 @@ get_config_param(EnvVar, Key, Config, Default) ->
 	{ok, Value} -> Value;
 	_ ->
 	    case os:getenv(EnvVar) of
-		false -> false;   
+		false -> Default;   
 		Value -> Value
 	    end
     end.
