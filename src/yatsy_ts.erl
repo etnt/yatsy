@@ -806,7 +806,7 @@ get_config_param(EnvVar, Key, Config) ->
     end.
 
 get_config_param(EnvVar, Key, Config, Default) -> 
-    case config(Key, Config, Default) of
+    case config(Key, Config) of
 	{ok, Value} -> Value;
 	_ ->
 	    case os:getenv(EnvVar) of
