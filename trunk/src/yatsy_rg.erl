@@ -242,11 +242,12 @@ html(Body) ->
 
 style() ->
     {style, [],
-     ["#yatsy_output {margin-left: 20px; margin-top: 40px}\n"
+     ["\n#yatsy_output {margin-left: 20px; margin-top: 40px}\n"
       "#yatsy_output table {border-collapse: collapse}\n"
       "#yatsy_output td {border: 1px solid black; padding: 3px 6px 3px 6px}\n"
       "#yatsy_output th {border: 1px solid black; text-align: left; padding: 3px 6px 3px 6px}\n"
       "#yatsy_output h1 {font-size: x-large; padding-bottom: 10px}\n"
+      "#yatsy_error {background-color: #996666}\n"
       ]}.
 
 
@@ -256,15 +257,25 @@ style() ->
 do_top(Url, Apps) ->
     {'div', [{id, "yatsy_top"}],
      yatsy_ehtml:table(["Application"], 
-		       [[mk_link(Url, "app", Aname)] || 
-			   #app{name = Aname} <- Apps])}.
+		       [[mk_link(Url, "app", Aname, err(W))] || 
+			   W = #app{name = Aname} <- Apps])}.
+
+
+err(#app{finished=Suites}) ->
+    lists:member(true, [err(X) || X <- Suites]);
+err(#suite{finished=TCs}) ->
+    lists:member(true, [err(X) || X <- TCs]);
+err(#tc{rc=ok}) ->
+    false;
+err(#tc{rc=_Else}) ->
+    true.
 
 
 do_app(Url, App, Apps) ->
     case get_app(App, Apps) of
 	{ok, A} ->
-	    TDs = [[mk_link(Url, "suite", Sname), Doc] || 
-		      #suite{name = Sname, doc = Doc} <- A#app.finished],
+	    TDs = [[mk_link(Url, "suite", Sname, err(W)), Doc] || 
+		      W = #suite{name = Sname, doc = Doc} <- A#app.finished],
 	    {'div', [{id, "yatsy_app"}],
 	     yatsy_ehtml:table(["Suite", "Description"], TDs)};
 	_ ->
@@ -278,10 +289,10 @@ do_suite(Url, App, Suite, Apps) ->
 	{ok, A} ->
 	    case get_suite(Suite, A#app.finished) of
 		{ok, S} ->
-		    TDs = [[mk_link(Url, "tc", a2l(Tname)), a2l(RC), 
+		    TDs = [[mk_link(Url, "tc", a2l(Tname), err(W)), a2l(RC), 
 			    f2s(Time/1000), Doc] || 
-			      #tc{name = Tname, doc = Doc, 
-				  rc = RC, time = Time} <- S#suite.finished],
+			      W = #tc{name = Tname, doc = Doc, 
+				      rc = RC, time = Time} <- S#suite.finished],
 		    {'div', [{id, "yatsy_suite"}],
 		     yatsy_ehtml:table(["Test case","Result",
 					"Time (ms)", "Description"],TDs)};
@@ -375,13 +386,18 @@ get_tc(_, [])                      -> {error, "not found"}.
 %%% Either we generate one html page per app/suite/tc,
 %%% or we have one yatsy.yaws page + query arguments.
 %%%
-mk_link(F, _Key, Name) when function(F) ->
-    {a, [{href, F(Name)}], Name};
-mk_link(Url, Key, Aname) ->
+mk_link(F, _Key, Name, Error) when function(F) ->
+    {a, [{href, F(Name)},{class,yatsy_eclass(Error)}], Name};
+mk_link(Url, Key, Aname, Error) ->
     case qargs_p(Url) of
-	true -> {a, [{href, Url++"&"++Key++"="++Aname}], Aname};
-	_    -> {a, [{href, Url++"?"++Key++"="++Aname}], Aname}
+	true -> {a, [{href, Url++"&"++Key++"="++Aname},
+		     {class,yatsy_eclass(Error)}], Aname};
+	_    -> {a, [{href, Url++"?"++Key++"="++Aname},
+		     {class,yatsy_eclass(Error)}], Aname}
     end.
+
+yatsy_eclass(true) -> "yatsy_error";
+yatsy_eclass(_)    -> "yatsy_no_error".
 
 %%% Do the Url contain any '?' , i.e query args ?
 qargs_p(Url) ->
