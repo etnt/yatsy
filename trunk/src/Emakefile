@@ -1,4 +1,4 @@
-{['yatsy','yatsy_ts','yatsy_tc','yatsy_rg','yatsy_ehtml'],
+{['yatsy','yatsy_ts','yatsy_tc','yatsy_rg','yatsy_ehtml','yatsy_sendmail'],
  [{outdir,"../ebin"},debug_info]}.
 
 
