@@ -17,7 +17,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
 
--import(yatsy_ts, [a2l/1, l2a/1, i2l/1, n2l/1]).
+-import(yatsy_ts, [a2l/1, l2a/1, i2l/1, n2l/1, err/1]).
 -import(yaws_api, [ehtml_expand/1]).
 
 -include("yatsy_ts.hrl").
@@ -251,24 +251,12 @@ style() ->
       ]}.
 
 
-
-
-
 do_top(Url, Apps) ->
     {'div', [{id, "yatsy_top"}],
      yatsy_ehtml:table(["Application"], 
 		       [[mk_link(Url, "app", Aname, err(W))] || 
 			   W = #app{name = Aname} <- Apps])}.
 
-
-err(#app{finished=Suites}) ->
-    lists:member(true, [err(X) || X <- Suites]);
-err(#suite{finished=TCs}) ->
-    lists:member(true, [err(X) || X <- TCs]);
-err(#tc{rc=ok}) ->
-    false;
-err(#tc{rc=_Else}) ->
-    true.
 
 
 do_app(Url, App, Apps) ->

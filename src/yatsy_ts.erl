@@ -22,7 +22,7 @@
 	 yaws_docroot/0, yaws_host/0, yaws_port/0, yaws_listen/0,
 	 l2a/1, a2l/1, i2l/1, n2l/1,
 	 output_dir/0, get_status/0,
-	 config/3
+	 config/3, err/1
 	]).
 
 -export([test/0]).
@@ -47,7 +47,8 @@
 	  timer_ref = false,          % Outstanding timeout timer reference
 	  error = false,              % Error reason when (status == ?YATSY_ERROR)
 	  config = ?DEFAULT_CONF,     % Any external configuration {Key,Value} tuples
-	  output_dir = ".",              % Where to put all output from Yatsy
+	  email = false,              % Email address where to send mail in case of errors
+	  output_dir = ".",           % Where to put all output from Yatsy
 	  quit = false,               % Quit when finished
 	  interactive = false,        % Running in interactive mode
 	  gen_html = false,           % Generate HTML content when finished
@@ -191,11 +192,14 @@ setup(Config) ->
     YawsListen = mk_listen(get_yaws_listen(Config, default_listen())),
     Config6 = overwrite({yaws_listen, YawsListen}, Config5),
     %%
+    Email = get_email(Config, false),
+    %%
     Apps = get_apps(TopDir),
     #s{top_dir     = TopDir,
        output_dir  = OutDir,
        gen_html    = l2bool(get_generate_html(Config)),
        config      = Config6,
+       email       = Email,
        quit        = l2bool(get_quit_when_finished(Config)),
        interactive = Iact,
        remote_node = l2a(get_remote_node(Config)),
@@ -557,9 +561,34 @@ exec_tc(State) ->
 finished(#s{status = ?YATSY_FINISHED, gen_html = true} = S) ->
     ?ilog("Yatsy finished!~n", []),
     yatsy_rg:ts_is_finished(S#s.finished, S#s.output_dir, S#s.quit),
+    maybe_sendmail(S),
     S;
 finished(S) ->
+    maybe_sendmail(S),
     S.
+
+maybe_sendmail(S) ->
+    case any_errors(S) of
+	true when list(S#s.email) -> 
+	    yatsy_sendmail:send(S#s.email,
+				"yatsy",
+				"Error in Yatsy output",
+				"Error in Yatsy output");
+	_ ->
+	    false
+    end.
+    
+any_errors(S) ->
+    lists:member(true, [err(X) || X <- S#s.finished]).
+
+err(#app{finished=Suites}) ->
+    lists:member(true, [err(X) || X <- Suites]);
+err(#suite{finished=TCs}) ->
+    lists:member(true, [err(X) || X <- TCs]);
+err(#tc{rc=ok}) ->
+    false;
+err(#tc{rc=_Else}) ->
+    true.
 
 
 %%
@@ -793,6 +822,9 @@ get_yaws_port(Config, Default) ->
 
 get_yaws_listen(Config, Default) -> 
     get_config_param("YATSY_YAWS_LISTEN", yaws_listen, Config, Default).
+
+get_email(Config, Default) -> 
+    get_config_param("YATSY_EMAIL", email, Config, Default).
 
 
 get_config_param(EnvVar, Key, Config) -> 
