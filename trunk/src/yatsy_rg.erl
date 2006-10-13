@@ -247,7 +247,7 @@ style() ->
       "#yatsy_output td {border: 1px solid black; padding: 3px 6px 3px 6px}\n"
       "#yatsy_output th {border: 1px solid black; text-align: left; padding: 3px 6px 3px 6px}\n"
       "#yatsy_output h1 {font-size: x-large; padding-bottom: 10px}\n"
-      "#yatsy_error {background-color: #996666}\n"
+      ".yatsy_error {background-color: red}\n"
       ]}.
 
 
