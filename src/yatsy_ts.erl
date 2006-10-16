@@ -573,11 +573,17 @@ maybe_sendmail(S) ->
 	    yatsy_sendmail:send(S#s.email,
 				"yatsy",
 				"Error in Yatsy output",
-				"Error in Yatsy output");
+				"Error in Yatsy output:\n\n"
+				"  Date & Time : "++nice_date_time()++"\n"
+				"  Remote Node : "++to_list(S#s.remote_node)++"\n"
+				"  Output Dir  : "++S#s.output_dir++"\n"
+			       );
 	_ ->
 	    false
     end.
-    
+
+
+
 any_errors(S) ->
     lists:member(true, [err(X) || X <- S#s.finished]).
 
@@ -865,3 +871,23 @@ config(Key, L) when list(L) ->
 	
 
 
+    
+-define(il(I), integer_to_list(I)).
+
+nice_date_time() ->
+    nice_date()++" , "++nice_time().
+
+nice_date() ->
+    {Y,M,D} = date(),
+    ?il(Y)++"-"++?il(M)++"-"++?il(D).
+
+nice_time() ->
+   {H,N,S} = time(),
+    ?il(H)++":"++?il(N)++":"++?il(S).
+
+-undef(il).
+
+to_list(X) when atom(X)    -> atom_to_list(X);
+to_list(X) when integer(X) -> integer_to_list(X);
+to_list(X) when float(X)   -> float_to_list(X);
+to_list(X) when list(X)    -> X.
