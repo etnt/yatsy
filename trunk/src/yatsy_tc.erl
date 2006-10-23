@@ -12,6 +12,9 @@
 	 local_call/4
 	]).
 
+%% Internal export
+-export([call_fun/1]).
+
 -import(yatsy_ts, [l2a/1, a2l/1]).
 
 -include("yatsy_ts.hrl").
@@ -100,7 +103,7 @@ do_run(_Pid, Node, Mod, #tc{name = Fun}, Config) ->
     case call(Node, Mod, init_per_testcase, [Fun, Config]) of
 	{_, NewConfig} when list(NewConfig) ->
 	    new_timeout(NewConfig),
-	    case call(Config, Node, Mod, Fun, [NewConfig]) of
+	    case call(NewConfig, Node, Mod, Fun, [NewConfig]) of
 		{Time, Res} when Res == true; Res == ok -> 
 		    call(Node, Mod, fin_per_testcase, [Fun, NewConfig]),
 		    yatsy_ts:tc_run_reply({ok, Time});
@@ -124,7 +127,15 @@ call(Node, Mod, Fun, Args) ->
     call([], Node, Mod, Fun, Args).
 
 call(Config, false, Mod, Fun, Args) -> local_call(iact(Config), Mod, Fun, Args);
-call(Config, Node, Mod, Fun, Args)  -> do_rpc(iact(Config), Node, Mod, Fun, Args).
+call(Config, Node, Mod, Fun, Args)  ->
+    case yatsy_ts:config(call_in_yatsy_node, Config, false) of
+	F when function(F) ->
+	    local_call(iact(Config), ?MODULE, call_fun, [F]);
+	_ ->
+	    do_rpc(iact(Config), Node, Mod, Fun, Args)
+    end.
+
+call_fun(F) -> F().
 
 
 iact(Config) -> 
