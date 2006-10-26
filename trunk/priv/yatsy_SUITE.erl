@@ -17,6 +17,11 @@
 %%   A list of key/value pairs, holding the test case configuration.
 %% Description: Initiation before the whole suite
 %%
+%% Special Yatsy return values:
+%%
+%%   {timeout, MilliSeconds}  -  Set overall timeout value for the test cases.
+%%   
+%%
 %% Note: This function is free to add any key/value pairs to the Config
 %% variable, but should NOT alter/remove any existing entries.
 %%--------------------------------------------------------------------
@@ -41,9 +46,13 @@ fin_per_suite(_Config) ->
 %%
 %% Description: Initiation before each test case
 %%
-%% A special Yatsy value: {timeout, MilliSec} can be included
-%% in the returned config list. It will set the timeout value
-%% for this particular test case to: MilliSec , as specified.
+%% Special Yatsy return values:
+%%
+%%   {timeout, MilliSeconds}  -  Set timeout value for this test case.
+%%
+%%   {call_in_yatsy_node, Fun} - Call this Fun in the local Yatsy node
+%%                               and not in the target node. This makes
+%%                               it possible to test, e.g a communication API.
 %%
 %% Note: This function is free to add any key/value pairs to the Config
 %% variable, but should NOT alter/remove any existing entries.
