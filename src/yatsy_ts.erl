@@ -21,7 +21,8 @@
 	 get_finished/0,
 	 yaws_docroot/0, yaws_host/0, yaws_port/0, yaws_listen/0,
 	 l2a/1, a2l/1, i2l/1, n2l/1,
-	 output_dir/0, get_status/0,
+	 output_dir/0, get_status/0, 
+	 run_in_remote_node/0, target_node/0,
 	 config/3, err/1
 	]).
 
@@ -41,7 +42,8 @@
 -record(s, {
 	  status = ?YATSY_IDLE,       % idle | running | finished
 	  top_dir,                    % Top directory
-	  remote_node = false,        % Run the test cases on this node
+	  target_node = false,        % Name of target node
+	  run_in_remote_node = false, % false: run in this node, true: run in target node
 	  pid = false,                % Current PID of running testcase
 	  timeout = ?DEFAULT_TIMEOUT, % Test case timeout
 	  timer_ref = false,          % Outstanding timeout timer reference
@@ -61,7 +63,8 @@
 
 test() -> 
     start([{top_dir, "/home/tobbe/Kreditor/kred/lib"},
-	   {remote_node, kred@sej}]).
+	   {target_node, kred@sej},
+	   {run_in_remote_node, true}]).
 
 
 
@@ -136,6 +139,12 @@ yaws_listen() ->
 output_dir() ->
     gen_server:call(?SERVER, output_dir, infinity).
 
+run_in_remote_node() ->
+    gen_server:call(?SERVER, run_in_remote_node, infinity).
+
+target_node() ->
+    gen_server:call(?SERVER, target_node, infinity).
+
 
 
 suite_tc_reply(Res) ->
@@ -172,7 +181,7 @@ tc_new_timeout(Timeout) when integer(Timeout) ->
 init(Config) when list(Config) ->
     ?ilog("yatsy_ts: Starting...~n", []),
     State = setup(Config ++ ?DEFAULT_CONF),
-    remote_node_check(State).
+    target_node_check(State).
 
 setup(Config) ->
     TopDir = get_top_dir(Config),
@@ -195,6 +204,7 @@ setup(Config) ->
     Email = get_email(Config, false),
     %%
     Apps = get_apps(TopDir),
+    ?ilog("****** Found Apps=~p~n", [Apps]),
     #s{top_dir     = TopDir,
        output_dir  = OutDir,
        gen_html    = l2bool(get_generate_html(Config)),
@@ -202,21 +212,39 @@ setup(Config) ->
        email       = Email,
        quit        = l2bool(get_quit_when_finished(Config)),
        interactive = Iact,
-       remote_node = l2a(get_remote_node(Config)),
+       target_node = l2a(get_target_node(Config)),
+       run_in_remote_node = bool_check("run_in_remote_node", l2a(get_run_in_remote_node(Config))),
        all_apps    = Apps,
        queue       = Apps
       }.
+
+bool_check(_What, Bool) when Bool==true;Bool==false -> Bool;
+bool_check(What, _Bool) when list(What) ->
+    ?ilog("*** WARNING ***: Not bolean value(~s)~n", [What]),
+    false.
+
 
 mk_listen(T) when tuple(T) -> T;
 mk_listen(L) when list(L) ->
     [A,B,C,D] = string:tokens(L, "{}, "),
     {list_to_integer(A),list_to_integer(B),list_to_integer(C),list_to_integer(D)}.
 
-remote_node_check(#s{remote_node = false} = State) ->
+%%
+%% No target node to use!
+%%
+target_node_check(#s{target_node = false} = State) ->
     ?ilog("yatsy_ts: Ready...~n", []),
     {ok, State};
 %%
-remote_node_check(#s{remote_node = Node} = State) ->
+%% Don't run anything in the target node!
+%%
+target_node_check(#s{run_in_remote_node = false} = State) ->
+    ?ilog("yatsy_ts: Ready...~n", []),
+    {ok, State};
+%%
+%% We are supposed to run things in the target node!
+%%
+target_node_check(#s{target_node = Node} = State) ->
     case load_ourself(Node) of
 	ok ->
 	    ?ilog("yatsy_ts: Ready...~n", []),
@@ -367,6 +395,12 @@ handle_call(yaws_listen, _From, State) ->
 %%
 handle_call(output_dir, _From, State) ->
     {reply, {ok, State#s.output_dir}, State};
+%%
+handle_call(target_node, _From, State) ->
+    {reply, {ok, State#s.target_node}, State};
+%%
+handle_call(run_in_remote_node, _From, State) ->
+    {reply, {ok, State#s.run_in_remote_node}, State};
 %%
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -575,7 +609,7 @@ maybe_sendmail(S) ->
 				"Error in Yatsy output",
 				"Error in Yatsy output:\n\n"
 				"  Date & Time : "++nice_date_time()++"\n"
-				"  Remote Node : "++to_list(S#s.remote_node)++"\n"
+				"  Target Node : "++to_list(S#s.target_node)++"\n"
 				"  Output Dir  : "++S#s.output_dir++"\n"
 			       );
 	_ ->
@@ -598,41 +632,46 @@ err(#tc{rc=_Else}) ->
 
 
 %%
-run_tc(#s{remote_node = N, current = #app{current = #suite{name = M, doc = false}}} = S) -> 
+run_tc(#s{current = #app{current = #suite{name = M, doc = false}}} = S) -> 
     %% Must be first time we enter this suite, so we start off by
     %% retrieving the suite doc string.
     ?ilog("retrieving suite: ~s doc string...~n", [M]),
-    Pid =  yatsy_tc:suite_doc_and_load(N, suite_name(S)),
+    Pid =  yatsy_tc:suite_doc_and_load(target_node(S), suite_name(S)),
     {ok, Tref} = timer:send_after(?DEFAULT_TIMEOUT, {timeout_suite_doc, Pid}),
     S#s{pid = Pid, timer_ref = Tref};
 %%
-run_tc(#s{remote_node = N, current = #app{current = #suite{name = M, init = false}}} = S) -> 
+run_tc(#s{current = #app{current = #suite{name = M, init = false}}} = S) -> 
     %% Must be the second time we enter this suite, 
     %% we need to call the init_per_suite/1 function.
     ?ilog("calling ~s:init_per_suite/1 function...~n", [M]),
-    Pid =  yatsy_tc:suite_init(N, suite_name(S), S#s.config),
+    Pid =  yatsy_tc:suite_init(target_node(S), suite_name(S), S#s.config),
     {ok, Tref} = timer:send_after(?DEFAULT_TIMEOUT, {timeout_suite_init, Pid}),
     S#s{pid = Pid, timer_ref = Tref};
 %%
-run_tc(#s{remote_node = N, current = #app{current = #suite{name = M, queue = false}}} = S) -> 
+run_tc(#s{current = #app{current = #suite{name = M, queue = false}}} = S) -> 
     %% Must be the third time we enter this suite, so we continue by
     %% retrieving the Test Case names of the suite.
     ?ilog("retrieving test cases for suite: ~s ...~n", [M]),
-    Pid =  yatsy_tc:suite_tc(N, suite_name(S)),
+    Pid =  yatsy_tc:suite_tc(target_node(S), suite_name(S)),
     {ok, Tref} = timer:send_after(?DEFAULT_TIMEOUT, {timeout_suite_tc, Pid}),
     S#s{pid = Pid, timer_ref = Tref};
 %%
-run_tc(#s{remote_node = N, current = #app{current = #suite{name = M, fin = true}}} = S) -> 
+run_tc(#s{current = #app{current = #suite{name = M, fin = true}}} = S) -> 
     %% Must be the last time we enter this suite, so we 
     %% need to call the fin_per_suite/1
     ?ilog("calling ~s:fin_per_suite/1 function...~n", [M]),
     Sconfig = ((S#s.current)#app.current)#suite.config,
-    Pid =  yatsy_tc:suite_fin(N, suite_name(S), Sconfig ++ S#s.config),
+    Pid =  yatsy_tc:suite_fin(target_node(S), suite_name(S), Sconfig ++ S#s.config),
     {ok, Tref} = timer:send_after(?DEFAULT_TIMEOUT, {timeout_suite_fin, Pid}),
     S#s{pid = Pid, timer_ref = Tref};
 run_tc(S) -> 
     %% Execute a Test Case in the suite.
     run_tc(S, state2tc(S)).
+
+
+target_node(#s{run_in_remote_node = true, target_node = Node}) -> Node;
+target_node(_)                                                 -> false.
+
 
 run_tc(S, {true, false}) -> exec_tc(S);      % go to next Test Case
 run_tc(S, {true, TC})    -> start_tc(S, TC);
@@ -641,13 +680,13 @@ run_tc(S, _)             -> S#s{status = ?YATSY_ERROR, error = ?EMSG_NO_TC}.
 %%%
 %%% Start running a Test Case. The Timeout is optional.
 %%%
-start_tc(#s{timeout = false, remote_node = N, config = Config} = S, TC) ->
+start_tc(#s{timeout = false, config = Config} = S, TC) ->
     Sconfig = ((S#s.current)#app.current)#suite.config,
-    Pid = yatsy_tc:run(N, suite_name(S), TC, Sconfig ++ Config),
+    Pid = yatsy_tc:run(target_node(S), suite_name(S), TC, Sconfig ++ Config),
     S#s{pid = Pid, timer_ref = false};
-start_tc(#s{timeout = Timeout, remote_node = N, config = Config} = S, TC) ->
+start_tc(#s{timeout = Timeout, config = Config} = S, TC) ->
     Sconfig = ((S#s.current)#app.current)#suite.config,
-    Pid = yatsy_tc:run(N, suite_name(S), TC, Sconfig ++ Config),
+    Pid = yatsy_tc:run(target_node(S), suite_name(S), TC, Sconfig ++ Config),
     {ok, Tref} = timer:send_after(Timeout, {timeout_tc, Pid}),
     S#s{pid = Pid, timer_ref = Tref}.
 
@@ -805,8 +844,11 @@ l2bool(_)      -> false.
 get_top_dir(Config) -> 
     get_config_param("YATSY_TOP_DIR", top_dir, Config).
 
-get_remote_node(Config) -> 
-    get_config_param("YATSY_REMOTE_NODE", remote_node, Config).
+get_target_node(Config) -> 
+    get_config_param("YATSY_TARGET_NODE", target_node, Config).
+
+get_run_in_remote_node(Config) -> 
+    get_config_param("YATSY_RUN_IN_REMOTE_NODE", run_in_remote_node, Config).
 
 get_output_dir(Config) -> 
     get_config_param("YATSY_OUTPUT_DIR", output_dir, Config).
