@@ -204,7 +204,7 @@ setup(Config) ->
     Email = get_email(Config, false),
     %%
     Apps = get_apps(TopDir),
-    ?ilog("****** Found Apps=~p~n", [Apps]),
+    ?ilog("****** (TopDir=~p) Found Apps=~p~n", [TopDir,Apps]),
     #s{top_dir     = TopDir,
        output_dir  = OutDir,
        gen_html    = l2bool(get_generate_html(Config)),
@@ -359,10 +359,12 @@ handle_call({run,A,S,T}, _From, State) ->
     ?ilog("Yatsy starting App=~p , Suite=~p , TC=~p ...~n", [A,S,T]),
     case x_suite(A, S, State#s.all_apps) of
 	{ok, Suite} ->
+	    ?ilog("+++ SUITE=~p~n", [Suite]),
 	    App = #app{name = A, queue = [Suite#suite{tcs_only = [l2a(T)]}]},
 	    NewState = State#s{finished = [], current = false, queue = [App]},
 	    {reply, ok, exec_tc(NewState)};
 	_ ->
+	    ?ilog("+++ NOT FOUND SUITE=~p , AllApps=~p~n", [S, State#s.all_apps]),
 	    {reply, {error, "Suite not found"}, State}
     end;
 %%
@@ -613,7 +615,14 @@ maybe_sendmail(S) ->
 				"  Output Dir  : "++S#s.output_dir++"\n"
 			       );
 	_ ->
-	    false
+	    yatsy_sendmail:send(S#s.email,
+				"yatsy",
+				"Successful Yatsy output",
+				"Yatsy completed successfully:\n\n"
+				"  Date & Time : "++nice_date_time()++"\n"
+				"  Target Node : "++to_list(S#s.target_node)++"\n"
+				"  Output Dir  : "++S#s.output_dir++"\n"
+			       )
     end.
 
 
@@ -666,6 +675,7 @@ run_tc(#s{current = #app{current = #suite{name = M, fin = true}}} = S) ->
     S#s{pid = Pid, timer_ref = Tref};
 run_tc(S) -> 
     %% Execute a Test Case in the suite.
+    ?ilog("calling TestCase: ~p~n", [state2tc(S)]),
     run_tc(S, state2tc(S)).
 
 
