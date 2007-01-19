@@ -84,7 +84,8 @@
 -module(yatsy).
 
 -export([start/0, start_link/0, start/1, start_link/1,
-	 run/0, clean/0, clean_and_run/0,
+	 run/0, run/1, run/2, run/3,
+	 clean/0, clean_and_run/0,
 	 top/1, app/2, suite/3, tc/4,
 	 start_yaws/0,
 	 quick/0, quick/1
@@ -170,6 +171,15 @@ start_link(Config) ->
 
 run() -> 
     yatsy_ts:run().
+
+run(A) -> 
+    yatsy_ts:run(A).
+
+run(A, S) -> 
+    yatsy_ts:run(A, S).
+
+run(A, S, C) -> 
+    yatsy_ts:run(A, S, C).
 
 clean() ->
     yatsy_ts:clean().
