@@ -614,7 +614,7 @@ maybe_sendmail(S) ->
 				"  Target Node : "++to_list(S#s.target_node)++"\n"
 				"  Output Dir  : "++S#s.output_dir++"\n"
 			       );
-	_ ->
+	_ when list(S#s.email) ->
 	    yatsy_sendmail:send(S#s.email,
 				"yatsy",
 				"Successful Yatsy output",
@@ -622,7 +622,9 @@ maybe_sendmail(S) ->
 				"  Date & Time : "++nice_date_time()++"\n"
 				"  Target Node : "++to_list(S#s.target_node)++"\n"
 				"  Output Dir  : "++S#s.output_dir++"\n"
-			       )
+			       );
+	_ ->
+	    true
     end.
 
 
