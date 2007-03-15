@@ -733,7 +733,8 @@ next_tc(#s{finished = F, current = C, queue = [H|T]} = X) ->
 next_tc(#s{finished = F, current = C, queue = []} = X) -> 
     case next_tc(C) of
 	{true, NewC} -> {true, X#s{current = NewC}};
-	false        -> {true, X#s{finished = [C|F], current = false}}
+	false        -> RevFinished = lists:reverse([C|F]),
+			{true, X#s{finished = RevFinished, current = false}}
     end;
 %%%
 next_tc(#app{current = false, queue = []}) -> 
@@ -748,7 +749,8 @@ next_tc(#app{finished = F, current = C, queue = [H|T]} = X) ->
 next_tc(#app{finished = F, current = C, queue = []} = X) -> 
     case next_tc(C) of
 	{true, NewC} -> {true, X#app{current = NewC}};
-	false        -> {true, X#app{finished = [C|F], current = false}}
+	false        -> RevFinished = lists:reverse([C|F]),
+			{true, X#app{finished = RevFinished, current = false}}
     end;
 %%%
 next_tc(#suite{queue = false} = X) -> % no test cases retrieved yet
@@ -768,7 +770,7 @@ next_tc(#suite{finished = F, current = C, queue = [H|T]} = X) ->
 	_    -> next_tc(X#suite{finished =[C|F], current = H, queue = T})
     end;
 next_tc(#suite{finished = F, current = C, queue = []} = X) -> 
-    {true, X#suite{finished =[C|F], current = false}}.
+    {true, X#suite{finished = lists:reverse([C|F]), current = false}}.
 
 %%% Check if it is ok to run this test case
 tc_ok(_, false)                   -> true;
