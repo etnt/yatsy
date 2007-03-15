@@ -613,6 +613,7 @@ maybe_sendmail(S) ->
 				"  Date & Time : "++nice_date_time()++"\n"
 				"  Target Node : "++to_list(S#s.target_node)++"\n"
 				"  Output Dir  : "++S#s.output_dir++"\n"
+				"  Summary     : \n\n"++ err_msg(S) ++"\n"
 			       );
 	_ when list(S#s.email) ->
 	    yatsy_sendmail:send(S#s.email,
@@ -641,6 +642,39 @@ err(#tc{rc=ok}) ->
 err(#tc{rc=_Else}) ->
     true.
 
+err_msg(#s{finished=Apps}) -> 
+    lists:foldl(fun(#app{name = Name} = A, Output) -> 
+			case err(A) of
+			    true  -> "=" ++ Name ++ "=\n" ++ 
+					 err_msg(A) ++ "\n" ++ Output;
+			    false -> Output
+			end
+		end,
+		"", Apps);
+
+err_msg(#app{finished=Suites}) -> 
+    lists:foldl(fun(#suite{name = Name} = Suite, Output) -> 
+			case err(Suite) of
+			    true  -> "==" ++ Name ++ "==\n" ++ 
+					 err_msg(Suite)++ "\n" ++ Output;
+			    false -> Output
+			end
+		end,
+		"", Suites);
+
+err_msg(#suite{finished=TCs}) -> 
+    err_msg(TCs);
+
+err_msg(TCs) -> err_msg_aux(TCs).
+
+err_msg_aux(TCs) -> err_msg_aux(TCs, []).
+
+err_msg_aux([], Errors) -> lists:flatten(lists:reverse(Errors));
+err_msg_aux([#tc{rc=ok}|TCs], Errors) -> err_msg_aux(TCs, Errors);
+err_msg_aux([#tc{error=Error, name=Name}|TCs], Errors) -> 
+    NewError = "===" ++ atom_to_list(Name) ++ "=== \n" ++ 
+	io_lib:format("~p~n", [Error]),
+    err_msg_aux(TCs, [NewError|Errors]).
 
 %%
 run_tc(#s{current = #app{current = #suite{name = M, doc = false}}} = S) -> 
