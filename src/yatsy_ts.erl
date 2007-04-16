@@ -205,14 +205,16 @@ setup(Config) ->
     %%
     Apps = get_apps(TopDir),
     ?ilog("****** (TopDir=~p) Found Apps=~p~n", [TopDir,Apps]),
+    TargetNode = l2a(get_target_node(Config)),
+    Config7 = overwrite({yatsy_target_node, TargetNode}, Config6),
     #s{top_dir     = TopDir,
        output_dir  = OutDir,
        gen_html    = l2bool(get_generate_html(Config)),
-       config      = Config6,
+       config      = Config7,
        email       = Email,
        quit        = l2bool(get_quit_when_finished(Config)),
        interactive = Iact,
-       target_node = l2a(get_target_node(Config)),
+       target_node = TargetNode,
        run_in_remote_node = bool_check("run_in_remote_node", l2a(get_run_in_remote_node(Config))),
        all_apps    = Apps,
        queue       = Apps
@@ -359,7 +361,6 @@ handle_call({run,A,S,T}, _From, State) ->
     ?ilog("Yatsy starting App=~p , Suite=~p , TC=~p ...~n", [A,S,T]),
     case x_suite(A, S, State#s.all_apps) of
 	{ok, Suite} ->
-	    ?ilog("+++ SUITE=~p~n", [Suite]),
 	    App = #app{name = A, queue = [Suite#suite{tcs_only = [l2a(T)]}]},
 	    NewState = State#s{finished = [], current = false, queue = [App]},
 	    {reply, ok, exec_tc(NewState)};
