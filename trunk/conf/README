@@ -1,0 +1,5 @@
+
+To use an explicit Yaws installation, run:
+
+  ./configure --with-yaws_dir=/home/tobbe/yaws-svn
+
