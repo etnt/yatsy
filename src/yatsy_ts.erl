@@ -57,7 +57,8 @@
 	  all_apps = [],
 	  finished = [],              % list of #app{}
 	  current = false,            % #app{}
-	  queue = []                  % list of #app{}
+	  queue = [],                 % list of #app{}
+	  target_dir                  % top dir of target code
 	 }).
 
 
@@ -185,6 +186,7 @@ init(Config) when list(Config) ->
 
 setup(Config) ->
     TopDir = get_top_dir(Config),
+    TargetDir = get_target_dir(Config),
     %%
     OutDir = get_output_dir(Config),
     Config2 = overwrite({output_dir, OutDir}, Config),
@@ -203,11 +205,13 @@ setup(Config) ->
     %%
     Email = get_email(Config, false),
     %%
-    Apps = get_apps(TopDir),
-    ?ilog("****** (TopDir=~p) Found Apps=~p~n", [TopDir,Apps]),
     TargetNode = l2a(get_target_node(Config)),
+    Apps = get_apps(TargetNode, TargetDir),
+    ?ilog("****** (TargetNode=~p, TargetDir=~p) Found ~p applications~n", 
+	  [TargetNode, TargetDir, length(Apps)]),
     Config7 = overwrite({yatsy_target_node, TargetNode}, Config6),
     #s{top_dir     = TopDir,
+       target_dir  = TargetDir,
        output_dir  = OutDir,
        gen_html    = l2bool(get_generate_html(Config)),
        config      = Config7,
@@ -814,8 +818,16 @@ tc_ok(TC, [_|T])                  -> tc_ok(TC, T);
 tc_ok(_, [])                      -> false.
     
 
-get_apps(TopDir) -> 
-    Paths = filter_code_path(TopDir),
+get_apps(Node, Dir) when Node == node() -> 
+    get_apps(Dir);
+get_apps(Node, Dir) -> 
+    Ps = rpc:call(Node, code, get_path, []),
+    lists:foreach(fun(P) -> code:add_path(P) end,
+		  Ps -- code:get_path()),
+    get_apps(Dir).
+
+get_apps(Dir) -> 
+    Paths = filter_code_path(Dir),
     F = fun(P, Acc) ->
 		case get_app(P) of
 		    {ok, A} -> [A|Acc];
@@ -824,10 +836,10 @@ get_apps(TopDir) ->
 	end,
     lists:foldr(F, [], Paths).
 
-filter_code_path(TopDir) ->
-    Len = length(TopDir),
+filter_code_path(Dir) ->
+    Len = length(Dir),
     F = fun(Path, Acc) -> 
-		case regexp:match(Path, TopDir) of
+		case regexp:match(Path, Dir) of
 		    {match, 1, Len} -> [Path | Acc];
 		    _ -> Acc
 		end
@@ -892,6 +904,9 @@ l2bool(_)      -> false.
 
 get_top_dir(Config) -> 
     get_config_param("YATSY_TOP_DIR", top_dir, Config).
+
+get_target_dir(Config) -> 
+    get_config_param("YATSY_TARGET_DIR", target_dir, Config).
 
 get_target_node(Config) -> 
     get_config_param("YATSY_TARGET_NODE", target_node, Config).

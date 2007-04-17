@@ -1,0 +1,221 @@
+#!/bin/bash
+#
+#  This is a rudimentary script for starting Yatsy.
+#  Don't hesitate to snatch it and adjust it for your particular setup.
+#
+
+YATSY_DIR=@YATSY_DIR@
+ERL=@ERL@
+YAWS_DIR=@YAWSDIR@
+
+YATSY_EBIN_DIR=${YATSY_DIR}/ebin
+YAWS_EBIN_DIR=${YAWS_DIR}/ebin
+ERL_FLAGS=" -sname yatsy -pa ${YATSY_EBIN_DIR} -pa ${YAWS_EBIN_DIR} "
+DATE=`date "+%d_%b_%Y_%H_%M"`
+RESULT_DIR=`pwd`
+TARGET_NODE=
+TARGET_DIR=`pwd`
+IACTIVE="false"
+START_LOCAL="false"
+HOST=`hostname`
+YAWS_HOST=`hostname`
+GENERATE_HTML="false"
+GENERATE_CC="false"
+QUIT_WHEN_FINISHED="false"
+RUN_FUNC="quick"
+RUN_IN_REMOTE_NODE="true"
+
+help()
+{
+        echo "usage:  "
+        echo ""
+        echo 
+        echo "   yatsy.sh -n <target-node>     -- name of target node (e.g a@b)"
+        echo "            [-host <hostname>]   -- run test cases on Host"
+        echo "            [-email <email-addr] -- email address, receiving error reports"
+        echo "            [-b]                 -- do not run in the target node"
+        echo "            [-i]                 -- run interactive"
+        echo "            [-html]              -- generate html on disk"
+        echo "            [-m]                 -- start test cases manually"
+        echo "            [-pa <path>]         -- add path to a ebin directory"
+        echo "            [-r]                 -- result directory"
+        echo "            [-s]                 -- start local target"
+        echo "            [-t]                 -- target code top-directory"
+        echo "            [-q]                 -- quit when finished"
+        echo 
+        exit 1
+}
+
+
+
+while [ $# -gt 0 ] 
+do
+  arg=$1
+  shift;
+  case $arg in
+      -host)
+	  HOST=$1
+	  shift;;
+
+      -pa)
+	  if [ ! -z "$1" ]; then
+	      ERL_FLAGS+=" -pa $1"
+	      shift
+	  fi;;
+
+      -email)
+	  if [ ! -z "$1" ]; then
+	      export YATSY_EMAIL="$1"
+	      shift
+	  fi;;
+
+      -b)
+	  RUN_IN_REMOTE_NODE="false";;  
+
+      -html)
+	  GENERATE_HTML="true";;
+
+      -cc)
+	  GENERATE_CC="true";;
+
+      -i)
+	  IACTIVE="true"
+	  ;;
+
+      -m)
+	  RUN_FUNC="start"
+	  ;;
+
+      -n)
+	  TARGET_NODE="$1"
+	  shift
+	  ;;
+
+      -q)
+	  QUIT_WHEN_FINISHED="true"
+	  ;;
+
+      -r)
+	  RESULT_DIR="$1"
+	  shift
+	  ;;
+
+      -s)
+	  START_LOCAL="true";;
+
+      -t)
+	  TARGET_DIR="$1"
+	  shift
+	  ;;
+
+      *)
+	  help
+  esac
+done
+
+
+if [ -z "${TARGET_NODE}" ]; then
+  echo "You must specify the target node name!"
+  exit 1
+fi
+
+#
+# Setup Yatsy environment variables
+#
+export YATSY_TOP_DIR="${RESULT_DIR}/yatsy"
+export YATSY_OUTPUT_DIR="${RESULT_DIR}/yatsy_output.${DATE}"
+export YATSY_TARGET_DIR="${TARGET_DIR}"
+export YATSY_TARGET_NODE="${TARGET_NODE}"
+export YATSY_RUN_IN_REMOTE_NODE="${RUN_IN_REMOTE_NODE}"
+export YATSY_GENERATE_HTML="${GENERATE_HTML}"
+export YATSY_GENERATE_CC="${GENERATE_CC}"
+export YATSY_QUIT_WHEN_FINISHED="${QUIT_WHEN_FINISHED}"
+export YATSY_INTERACTIVE="${IACTIVE}"
+export YATSY_YAWS_HOST="${YAWS_HOST}"
+
+
+fail () {
+    echo "$*" >&2
+    exit 1
+}
+
+init () {
+    mkdir -p ${YATSY_TOP_DIR}
+    rm -rf ${YATSY_OUTPUT_DIR}
+    mkdir -p ${YATSY_OUTPUT_DIR}
+    if [ "${START_LOCAL}" = "true" ]; then
+	init_system
+    fi
+    rm ${YATSY_TOP_DIR}/latest_output
+    ln -s ${YATSY_OUTPUT_DIR}/html ${YATSY_TOP_DIR}/latest_output
+}
+
+init_system () {
+# 
+# ADD SOME CODE HERE IF YOU WANT TO CUSTOMIZE THIS SCRIPT !!
+#
+  echo "init system"
+}
+
+fin () {
+    if [ "${START_LOCAL}" = "true" ]; then
+	fin_system
+    fi
+}
+
+fin_system () {
+# 
+# ADD SOME CODE HERE IF YOU WANT TO CUSTOMIZE THIS SCRIPT !!
+#
+  echo "fin system"
+}
+
+
+start_local_target () {
+    echo == Starting ${YATSY_TARGET_NODE} ==
+# 
+# ADD SOME CODE HERE IF YOU WANT TO CUSTOMIZE THIS SCRIPT !!
+#
+    sleep 1
+}
+
+stop_local_target () {
+    echo == Stopping ${YATSY_TARGET_NODE} ==
+# 
+# ADD SOME CODE HERE IF YOU WANT TO CUSTOMIZE THIS SCRIPT !!
+#
+    sleep 1
+}
+
+
+do_test() {
+
+    init
+
+    if [ "${START_LOCAL}" = "true" ]; then
+	start_local_target
+    fi
+
+    if [ "${IACTIVE}" = "true" ]; then
+	${ERL} ${ERL_FLAGS} -s yatsy ${RUN_FUNC}
+    else
+	${ERL} ${ERL_FLAGS} -s yatsy ${RUN_FUNC} -noshell -detach
+    fi
+    
+    if [ "${START_LOCAL}" = "true" ]; then
+	stop_local_target
+    fi
+
+    fin
+
+}
+
+do_test
+
+
+
+
+
+
+
+

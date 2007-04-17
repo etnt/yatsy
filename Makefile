@@ -1,10 +1,16 @@
 
 ERL=erl
 
-all: src
+all: conf src
 
 src: true
 	(cd src; erl -make all)
+
+conf: true
+	(cd conf; $(MAKE))
+
+conf_clean:
+	(cd conf; $(MAKE) clean)
 
 true:
 
