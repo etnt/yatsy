@@ -1,26 +1,25 @@
 
 ERL=erl
 
+.PHONY: all src conf conf_clean clean
 all: conf src
 
-src: true
-	(cd src; erl -make all)
+src:
+	cd src && erl -make all
 
-conf: true
-	(cd conf; $(MAKE))
+conf:
+	cd conf && $(MAKE)
 
 conf_clean:
-	(cd conf; $(MAKE) clean)
-
-true:
+	cd conf && $(MAKE) clean
 
 clean:
-	(cd ebin; rm -f *.beam)
+	cd ebin && rm -f *.beam
 
 
 doc: doc/yatsy.html
 
 doc/%.html: src/%.erl
-	(${ERL} -noshell -run edoc file $< -run init stop; \
-	 mv src/$*.html doc)
+	${ERL} -noshell -run edoc file $< -run init stop && \
+	mv src/$*.html doc
 
