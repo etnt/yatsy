@@ -111,9 +111,12 @@ start_yaws() ->
     Listen  = yatsy_ts:yaws_listen(),
     SL = [{servername, Host}, {port, Port}, 
 	  {listen, Listen}],
-    GL = [{logdir, OutDir}],
+    GL = [{logdir, safe_dir(OutDir)},{tmpdir, "/tmp"}],
     yaws:start_embedded(DocRoot, SL, GL).
 
+safe_dir(L) when list(L) -> L;
+safe_dir(_)              -> "/tmp".
+     
     
 %%%
 %%% Yatsy Test Server interface
