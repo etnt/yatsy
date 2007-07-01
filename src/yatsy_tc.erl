@@ -50,7 +50,8 @@ suite_doc_and_load(Node, Mod) ->
     Self = self(),
     spawn(fun() -> do_suite_doc_and_load(Self, Node, Mod, all, [doc]) end).
 
-do_suite_doc_and_load(_Pid, Node, Mod, Fun, Args) ->
+do_suite_doc_and_load(_Pid, Node, Mod0, Fun, Args) ->
+    Mod = l2a(Mod0),
     call(Node, code, purge, [Mod]),
     case call(Node, code, load_file, [Mod]) of
 	{_, {module, Mod}} ->
