@@ -10,7 +10,9 @@
 -export([start/0, start_link/0,
 	 top/1, app/2, suite/3, tc/4,
 	 ts_is_finished/3,
-	 html/1, style/0
+	 ts_is_finished/1,
+	 html/1, style/0,
+	 gen_html/2, gen_cc/2
 	]).
 
 %% gen_server callbacks
@@ -55,6 +57,15 @@ tc(Url, App, Suite, Tc) ->
 ts_is_finished(Finished, OutDir, Quit) ->
     gen_server:cast(?SERVER, {ts_is_finished, Finished, OutDir, Quit}).
 
+ts_is_finished(Quit) ->
+    gen_server:cast(?SERVER, {ts_is_finished, Quit}).
+
+gen_html(Finished, Outdir) ->
+    gen_server:call(?SERVER, {gen_html, Finished, Outdir}).
+
+gen_cc(Finished, Outdir) ->
+    gen_server:call(?SERVER, {gen_cc, Finished, Outdir}).
+
 
 %%====================================================================
 %% gen_server callbacks
@@ -95,6 +106,12 @@ handle_call({tc, Url, App, Suite, Tc}, _From, State) ->
     {ok, Finished} = yatsy_ts:get_finished(),
     {reply, do_tc(Url, App, Suite, Tc, Finished), State};
 %%
+handle_call({gen_html, Finished, OutDir}, _From, State) ->
+    {reply, produce_html_output(Finished, OutDir), State};
+%%
+handle_call({gen_cc, Finished, OutDir}, _From, State) ->
+    {reply, produce_cc_output(Finished, OutDir), State};
+%%
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -105,9 +122,7 @@ handle_call(_Request, _From, State) ->
 %%                                      {stop, Reason, State}
 %% Description: Handling cast messages
 %%--------------------------------------------------------------------
-handle_cast({ts_is_finished, Finished, OutDir, Quit}, State) ->
-    produce_html_output(Finished, OutDir),
-    ?ilog("Wrote HTML output!~n", []),
+handle_cast({ts_is_finished, Quit}, State) ->
     if (Quit == true) -> 
 	    ?ilog("Stopping yatsy...!~n", []),
 	    init:stop();
@@ -156,6 +171,12 @@ produce_html_output(Finished, OutDir) ->
     mk_suite_pages(Finished, HtmlDir),
     mk_tc_pages(Finished, HtmlDir).
 
+produce_cc_output(Finished, OutDir) ->
+    CCDir = filename:join([OutDir, "cc"]),
+    ?ilog("Putting xml output in ~p~n", [CCDir]),
+    os:cmd("mkdir "++CCDir),
+    cc_output(Finished, CCDir).
+    
 mk_top_page(Finished, HtmlDir) -> 
     Page = ehtml_expand(html([{h1, [], "The Application Page"},
 			      do_top(fun(Name) -> html_app_fname(Name) end,
@@ -393,3 +414,64 @@ qargs_p(Url) ->
 	0 -> false;
 	_ -> true
     end.
+
+%%% CC stuff
+
+
+sum_errors(Record) -> sum_errors(Record, 0).
+
+%% sum_errors(#s{finished = Apps}, Errors) ->
+%%     lists:foldl(fun(App, Errors) -> sum_errors(App, Errors) end, Errors, Apps);
+%% sum_errors(#app{finished=Suites}, Eroors) ->
+%%     lists:foldl(fun(Suite, Errors) -> sum_errors(Suite, Errors) end, 
+%% 		Errors, Suites);
+sum_errors(#suite{finished=TCs}, Errors) ->
+    lists:foldl(fun(TC, ErrorsAcc) -> sum_errors(TC, ErrorsAcc) end, Errors, TCs);
+sum_errors(#tc{rc=ok}, Errors)    -> Errors;
+sum_errors(#tc{rc=_Else}, Errors) -> Errors + 1.
+
+sum_tcs(#suite{finished=TCs}) -> 
+    SumFun = fun(#tc{time=T}, {No, Time}) -> {No+1, Time+T} end,
+    lists:foldl(SumFun, {0, 0.0}, TCs).
+			
+
+
+cc_output(Apps, OutDir) when is_list(Apps)->
+    lists:foreach(fun(App) -> cc_output(App, OutDir, App#app.name) end, Apps).
+
+cc_output(#app{finished = Finished}, OutDir, Appname) ->
+    lists:foreach(
+      fun(Suite) -> mk_cc_file(Suite, OutDir, Appname ++ Suite#suite.name) end,
+      Finished).
+			  
+
+mk_cc_file(Suite, OutDir, Name) ->
+%    Content = [{properties, [], cc_properties()}|cc_cases(Suite)],
+    Content = cc_cases(Suite),
+    Xml = [{testsuite, cc_artibutes(Suite), Content}],
+    PageContent = xmerl:export_simple(Xml, xmerl_xml),
+    Fname = filename:join([OutDir, Name ++ ".xml"]),
+    file:write_file(Fname, list_to_binary(lists:flatten(PageContent))).
+
+
+cc_artibutes(Suite) ->
+    {NoTcs, Time} = sum_tcs(Suite),
+    [{errors, 0},
+     {failures, sum_errors(Suite)}, 
+     {name, Suite#suite.name},
+     {tests, NoTcs},
+     {time, f2s(Time)}].
+
+cc_cases(#suite{finished = Cases, name = SuiteName}) ->
+    lists:map(fun(Case) -> cc_case(Case, SuiteName) end, Cases).
+
+cc_case(#tc{name = Name, time = Time} = TC, SuiteName) ->
+    {testcase, 
+     [{classname, SuiteName}, {name, Name}, {time, f2s(Time/1000)}], 
+     cc_msg(TC)}.
+
+cc_msg(#tc{rc  = ok}) -> [];
+cc_msg(#tc{name = Name, error = Error, rc  = RC}) ->
+    [{failure, [{message, RC}, {type, Name}],
+     [io_lib:format("~p~n", [Error])]}].
+  
