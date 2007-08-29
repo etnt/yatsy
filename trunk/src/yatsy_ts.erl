@@ -21,7 +21,7 @@
 	 get_finished/0,
 	 yaws_docroot/0, yaws_host/0, yaws_port/0, yaws_listen/0,
 	 l2a/1, a2l/1, i2l/1, n2l/1,
-	 output_dir/0, get_status/0, 
+	 output_dir/0, cc_output_dir/0, get_status/0, 
 	 run_in_remote_node/0, target_node/0,
 	 config/3, err/1
 	]).
@@ -51,9 +51,11 @@
 	  config = ?DEFAULT_CONF,     % Any external configuration {Key,Value} tuples
 	  email = false,              % Email address where to send mail in case of errors
 	  output_dir = ".",           % Where to put all output from Yatsy
-	  quit = false,               % Quit when finished
+	  cc_output_dir = ".",        % Where to put cruise control output from Yatsy
+ 	  quit = false,               % Quit when finished
 	  interactive = false,        % Running in interactive mode
 	  gen_html = false,           % Generate HTML content when finished
+	  gen_cc = true,              % Generate cc-style XML file when finished
 	  all_apps = [],
 	  finished = [],              % list of #app{}
 	  current = false,            % #app{}
@@ -140,6 +142,9 @@ yaws_listen() ->
 output_dir() ->
     gen_server:call(?SERVER, output_dir, infinity).
 
+cc_output_dir() ->
+    gen_server:call(?SERVER, cc_output_dir, infinity).
+
 run_in_remote_node() ->
     gen_server:call(?SERVER, run_in_remote_node, infinity).
 
@@ -180,7 +185,7 @@ tc_new_timeout(Timeout) when integer(Timeout) ->
 %% Description: Initiates the server
 %%--------------------------------------------------------------------
 init(Config) when list(Config) ->
-    ?ilog("yatsy_ts: Starting...~n", []),
+    ?ilog("yatsy_ts: Starting...~p ~n", [Config]),
     State = setup(Config ++ ?DEFAULT_CONF),
     target_node_check(State).
 
@@ -203,18 +208,23 @@ setup(Config) ->
     YawsListen = mk_listen(get_yaws_listen(Config, default_listen())),
     Config6 = overwrite({yaws_listen, YawsListen}, Config5),
     %%
+    CCOutDir = get_cc_output_dir(Config),
+    Config7 = overwrite({cc_output_dir, CCOutDir}, Config6),
+    %%
     Email = get_email(Config, false),
     %%
     TargetNode = l2a(get_target_node(Config)),
     Apps = get_apps(TargetNode, TargetDir),
     ?ilog("****** (TargetNode=~p, TargetDir=~p) Found ~p applications~n", 
 	  [TargetNode, TargetDir, length(Apps)]),
-    Config7 = overwrite({yatsy_target_node, TargetNode}, Config6),
+    Config8 = overwrite({yatsy_target_node, TargetNode}, Config7),
     #s{top_dir     = TopDir,
        target_dir  = TargetDir,
        output_dir  = OutDir,
+       cc_output_dir  = CCOutDir,
        gen_html    = l2bool(get_generate_html(Config)),
-       config      = Config7,
+       gen_cc      = l2bool(get_generate_cc(Config)),
+       config      = Config8,
        email       = Email,
        quit        = l2bool(get_quit_when_finished(Config)),
        interactive = Iact,
@@ -285,14 +295,26 @@ load_ourself(Node) ->
 ping(Node) ->
     ping(Node, 10).
 
-ping(_, 0) -> pong;
+ping(_, 0) -> pang;
 ping(Node, N) when N>0 ->
     ?ilog("Trying to contact node: ~p~n", [Node]),
     case net_adm:ping(Node) of
-	pong -> pong;
+	pong ->
+	    wait_started(Node);
 	_ ->
 	    sleep(500),
 	    ping(Node, N-1)
+    end.
+
+wait_started(Node) ->
+    case rpc:call(Node, init, get_status, []) of
+	{started, started} ->
+	    pong;
+	{starting, _} ->
+	    sleep(500),
+	    wait_started(Node);
+	_ ->
+	    pang
     end.
 
 sleep(T) -> 
@@ -332,7 +354,7 @@ handle_call(run, _From, State) when State#s.status == ?YATSY_RUNNING ->
 handle_call(run, _From, State) ->
     ?ilog("Yatsy starting...~n", []),
     NewState = State#s{finished = [], current = false, queue = State#s.all_apps},
-    {reply, ok, exec_tc(NewState)};
+    {reply, false, exec_tc(NewState)};
 %%
 handle_call({run, _}, _From, State) when State#s.status == ?YATSY_RUNNING ->
     {reply, {error, "already running"}, State};
@@ -403,6 +425,9 @@ handle_call(yaws_listen, _From, State) ->
 handle_call(output_dir, _From, State) ->
     {reply, {ok, State#s.output_dir}, State};
 %%
+handle_call(cc_output_dir, _From, State) ->
+    {reply, {ok, State#s.cc_output_dir}, State};
+%%
 handle_call(target_node, _From, State) ->
     {reply, {ok, State#s.target_node}, State};
 %%
@@ -446,7 +471,7 @@ handle_cast({suite_tc_reply, Pid, Res}, #s{pid = Pid} = State) ->
     {noreply, exec_tc(set_suite_tc(State#s{timer_ref = false}, Res))};
 %%
 handle_cast({tc_new_timeout, Timeout, Pid}, #s{pid = Pid} = State) ->
-    ?ilog("got new timeout: ~p for Test Case: ~p~n", 
+    ?dlog("got new timeout: ~p for Test Case: ~p~n", 
 	  [Timeout,app_suite_tc_name(State)]),
     cancel_timer(State),
     {ok, Tref} = timer:send_after(Timeout, {timeout_tc, Pid}),
@@ -576,11 +601,13 @@ set_suite_tc(#s{current = A} = S, _) ->
 set_tc_rc(#s{current = A} = S, {ok, Time}) ->
     Suite = A#app.current,
     TC = (Suite#suite.current)#tc{rc = ok, error = "", time = Time},
+    ?ilog("~p returned ok", [TC#tc.name]),
     S#s{current = A#app{current = Suite#suite{current = TC}}};
 set_tc_rc(#s{current = A} = S, Else) ->
     Suite = A#app.current,
     TC = Suite#suite.current,
     NewTC = TC#tc{rc = error, error = Else},
+    ?ilog("~p failed", [TC#tc.name]),
     S#s{current = A#app{current = Suite#suite{current = NewTC}}}.
 
 app_suite_tc_name(#app{name = A, current = #suite{name = S, current = #tc{name = T}}}) ->
@@ -599,13 +626,23 @@ exec_tc(State) ->
     end.
 
 %%% Check if HTML should be generated
-finished(#s{status = ?YATSY_FINISHED, gen_html = true} = S) ->
+finished(#s{} = S) ->
+    #s{status = ?YATSY_FINISHED, 
+       gen_html = GenHTML, 
+       gen_cc = GenCC,
+       output_dir = OutDir,
+       cc_output_dir = CCOutDir} = S,
+    case GenHTML of 
+	true  -> yatsy_rg:gen_html(S#s.finished, OutDir);
+	false -> ok
+    end,
+    case GenCC of 
+	true  -> yatsy_rg:gen_cc(S#s.finished, CCOutDir);
+	false -> ok
+    end,
+    yatsy_rg:ts_is_finished(S#s.quit),
+    maybe_sendmail(S),
     ?ilog("Yatsy finished!~n", []),
-    yatsy_rg:ts_is_finished(S#s.finished, S#s.output_dir, S#s.quit),
-    maybe_sendmail(S),
-    S;
-finished(S) ->
-    maybe_sendmail(S),
     S.
 
 maybe_sendmail(S) ->
@@ -716,7 +753,7 @@ run_tc(#s{current = #app{current = #suite{name = M, fin = true}}} = S) ->
     S#s{pid = Pid, timer_ref = Tref};
 run_tc(S) -> 
     %% Execute a Test Case in the suite.
-    ?ilog("calling TestCase: ~p~n", [state2tc(S)]),
+    ?dlog("calling TestCase: ~p~n", [state2tc_name(S)]),
     run_tc(S, state2tc(S)).
 
 
@@ -747,6 +784,13 @@ suite_name(#s{current = #app{current = #suite{name = Name}}}) -> Name.
 
 state2tc(#s{current = #app{current = #suite{current = TC}}}) -> {true, TC};
 state2tc(_)                                                  -> {true, false}.
+
+state2tc_name(#s{current = #app{current = #suite{current = TC}}}) ->
+    case TC of
+	#tc{name = Name} -> Name;
+	A -> {debug, A}
+    end;
+state2tc_name(Term) -> {debug, Term}.
 
 %%%
 %%%  yatsy_ts:foreach_tc(fun(X) -> io:format("~p~n", [X]) end, yatsy_ts:setup()).
@@ -917,8 +961,14 @@ get_run_in_remote_node(Config) ->
 get_output_dir(Config) -> 
     get_config_param("YATSY_OUTPUT_DIR", output_dir, Config).
 
+get_cc_output_dir(Config) -> 
+    get_config_param("YATSY_CC_OUTPUT_DIR", output_dir, Config).
+
 get_generate_html(Config) -> 
     get_config_param("YATSY_GENERATE_HTML", generate_html, Config).
+
+get_generate_cc(Config) -> 
+    get_config_param("YATSY_GENERATE_CC", generate_cc, Config).
 
 get_quit_when_finished(Config) -> 
     get_config_param("YATSY_QUIT_WHEN_FINISHED", quit_when_finished, Config).
