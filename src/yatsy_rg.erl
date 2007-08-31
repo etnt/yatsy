@@ -467,7 +467,7 @@ cc_cases(#suite{finished = Cases, name = SuiteName}) ->
 
 cc_case(#tc{name = Name, time = Time} = TC, SuiteName) ->
     {testcase, 
-     [{classname, SuiteName}, {name, Name}, {time, f2s(Time/1000)}], 
+     [{classname, SuiteName}, {name, Name}, {time, f2s(Time/100000)}], 
      cc_msg(TC)}.
 
 cc_msg(#tc{rc  = ok}) -> [];
