@@ -78,6 +78,11 @@
 %%%   </ol>
 %%% </p>
 %%%
+%%% It is possible to add {Key,Value} tuples to the list of Config tuples
+%%% when an init_XXXX routine returns. The following are some examples:
+%%%
+%%%  {timeout, Seconds}  -  This test case should use a non default timeout.
+%%%  {run_fin, Boolean}  -  Run the fin_XXXX routine (default: true)
 %%%
 %%% @end
 %%%-------------------------------------------------------------------
