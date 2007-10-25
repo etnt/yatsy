@@ -8,7 +8,7 @@
 	 suite_doc_and_load/2,
 	 suite_init/3,
 	 suite_fin/3,
-	 suite_tc/2,
+	 suite_tc/3,
 	 local_call/4
 	]).
 
@@ -23,12 +23,14 @@
 %%%
 %%% Get the names of the Test Cases in the Test Suite.
 %%%
-suite_tc(Node, Mod) -> 
+suite_tc(Node, Mod, Conf) -> 
     Self = self(),
-    spawn(fun() -> do_suite_tc(Self, Node, Mod, all, [suite]) end).
+    {value, {test_senario, Str}} = lists:keysearch(test_senario, 1, Conf),
+    Senario = list_to_atom(Str),
+    spawn(fun() -> do_suite_tc(Self, Node, Mod, all, [Senario]) end).
 
 do_suite_tc(_Pid, Node, Mod, Fun, Args) ->
-    case call(Node, Mod, Fun, Args) of
+    case catch call(Node, Mod, Fun, Args) of
 	{_, Ts} when list(Ts) -> 
 	    Res = [get_tc_doc(Node, Mod, #tc{name = Tname}) || Tname <- Ts],
 	    yatsy_ts:suite_tc_reply({ok, Res});

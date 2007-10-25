@@ -211,20 +211,23 @@ setup(Config) ->
     CCOutDir = get_cc_output_dir(Config),
     Config7 = overwrite({cc_output_dir, CCOutDir}, Config6),
     %%
+    Test = get_test_senario(Config, suite),
+    Config8 = overwrite({test_senario, Test}, Config7),
+    %%
     Email = get_email(Config, false),
     %%
     TargetNode = l2a(get_target_node(Config)),
     Apps = get_apps(TargetNode, TargetDir),
     ?ilog("****** (TargetNode=~p, TargetDir=~p) Found ~p applications~n", 
 	  [TargetNode, TargetDir, length(Apps)]),
-    Config8 = overwrite({yatsy_target_node, TargetNode}, Config7),
+    Config9 = overwrite({yatsy_target_node, TargetNode}, Config8),
     #s{top_dir     = TopDir,
        target_dir  = TargetDir,
        output_dir  = OutDir,
        cc_output_dir  = CCOutDir,
        gen_html    = l2bool(get_generate_html(Config)),
        gen_cc      = l2bool(get_generate_cc(Config)),
-       config      = Config8,
+       config      = Config9,
        email       = Email,
        quit        = l2bool(get_quit_when_finished(Config)),
        interactive = Iact,
@@ -739,7 +742,8 @@ run_tc(#s{current = #app{current = #suite{name = M, queue = false}}} = S) ->
     %% Must be the third time we enter this suite, so we continue by
     %% retrieving the Test Case names of the suite.
     ?ilog("retrieving test cases for suite: ~s ...~n", [M]),
-    Pid =  yatsy_tc:suite_tc(target_node(S), suite_name(S)),
+    Sconfig = ((S#s.current)#app.current)#suite.config,
+    Pid =  yatsy_tc:suite_tc(target_node(S), suite_name(S), Sconfig),
     {ok, Tref} = timer:send_after(?DEFAULT_TIMEOUT, {timeout_suite_tc, Pid}),
     S#s{pid = Pid, timer_ref = Tref};
 %%
@@ -984,6 +988,9 @@ get_yaws_port(Config, Default) ->
 
 get_yaws_listen(Config, Default) -> 
     get_config_param("YATSY_YAWS_LISTEN", yaws_listen, Config, Default).
+
+get_test_senario(Config, Default) -> 
+    get_config_param("YATSY_TEST_SENARIO", test_senario, Config, Default).
 
 get_email(Config, Default) -> 
     get_config_param("YATSY_EMAIL", email, Config, Default).
