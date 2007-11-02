@@ -220,6 +220,9 @@ setup(Config) ->
     Apps = get_apps(TargetNode, TargetDir),
     ?ilog("****** (TargetNode=~p, TargetDir=~p) Found ~p applications~n", 
 	  [TargetNode, TargetDir, length(Apps)]),
+
+    %%cover_compile(TargetNode, TargetDir),  % FIXME add proper flag
+
     Config9 = overwrite({yatsy_target_node, TargetNode}, Config8),
     #s{top_dir     = TopDir,
        target_dir  = TargetDir,
@@ -630,10 +633,11 @@ exec_tc(State) ->
 
 %%% Check if HTML should be generated
 finished(#s{} = S) ->
-    #s{status = ?YATSY_FINISHED, 
-       gen_html = GenHTML, 
-       gen_cc = GenCC,
-       output_dir = OutDir,
+    #s{status        = ?YATSY_FINISHED, 
+       gen_html      = GenHTML, 
+       gen_cc        = GenCC,
+       output_dir    = OutDir,
+       target_node   = TargetNode,
        cc_output_dir = CCOutDir} = S,
     case GenHTML of 
 	true  -> yatsy_rg:gen_html(S#s.finished, OutDir);
@@ -645,8 +649,17 @@ finished(#s{} = S) ->
     end,
     yatsy_rg:ts_is_finished(S#s.quit),
     maybe_sendmail(S),
+
+    %% cover_analysis(TargetNode, OutDir),  % FIXME proper flag test
+
     ?ilog("Yatsy finished!~n", []),
     S.
+
+cover_analysis(Node, Dir) when Node == node() ->
+    yatsy_cover:analyse_to_file(Dir);
+cover_analysis(Node, Dir) ->
+    rpc:call(Node, yatsy_cover, analyse_to_file, [Dir]).
+
 
 maybe_sendmail(S) ->
     case any_errors(S) of
@@ -864,7 +877,11 @@ tc_ok(_, false)                   -> true;
 tc_ok(#tc{name = Name}, [Name|_]) -> true;
 tc_ok(TC, [_|T])                  -> tc_ok(TC, T);
 tc_ok(_, [])                      -> false.
-    
+
+cover_compile(Node, Dir) when Node == node() ->    
+    yatsy_cover:cover_compile_beams(Dir);
+cover_compile(Node, Dir) ->
+    rpc:call(Node, yatsy_cover, cover_compile_beams, [Dir]).
 
 get_apps(Node, Dir) when Node == node() -> 
     get_apps(Dir);
