@@ -11,9 +11,6 @@
         ]).
 
 
-get_output_dir() -> "cover_output".
-
-
 %%%
 %%% Return list of .beam files to cover-compile.
 %%% Make it possible to customize this by calling a callback module.
@@ -37,14 +34,13 @@ get_beam_files(Path) ->
              false == lists:suffix("iso639.beam", File)].
 
 
-
 %%% cover compile all beams in our source dir
 %%% (beams must have been compiled with "debug_info" set)
 cover_compile_beams(Path) ->
     cover_compile_beams(Path, ?MODULE).
 
 cover_compile_beams(Path, Mod) ->
-  io:fwrite("Cover compiling .beam files:~n"),
+  io:fwrite("Cover compiling .beam files in ~p:~n", [Path]),
   do_cover_compile_beams(get_beams(Path, Mod), []).
 
 do_cover_compile_beams([Beam|RemainingBeams], Acc) ->
@@ -68,21 +64,20 @@ do_cover_compile_beams([], Acc) ->
 
 
 %% dump output for all cover analysed files
-analyse_to_file(Path) ->
-  %% delete any previous output
-  OutputDir = filename:join([Path, get_output_dir()]),
-  %% can I just delete OutputDir recursivelly somehow?
-  file:make_dir(OutputDir),
-  io:fwrite("Writing output of cover analysis:~n"),
-  analyse_to_file(Path, cover:modules(), []).
+analyse_to_file(OutDir) ->
+  %% FIXME: should any existing old OutDir be deleted here?
+  file:make_dir(OutDir),
+  io:fwrite("Putting cover analysis output in ~p:~n", [OutDir]),
+  %io:fwrite("Writing output of cover analysis:~n"),
+  analyse_to_file(OutDir, cover:modules(), []).
 
-analyse_to_file(Path, [Module|RemainingModules], Acc) ->
-  io:fwrite("  ~p: ~p ", [length(RemainingModules), Module]),
+analyse_to_file(OutDir, [Module|RemainingModules], Acc) ->
   OutputFile = filename:join([
-			      Path,
-			      get_output_dir(),
+			      OutDir,
 			      atom_to_list(Module)++".COVER.txt"
 			     ]),
+  io:fwrite("  ~p: ~p ", [length(RemainingModules), Module]),
+  %io:fwrite("  ~p: ~p -> ~p ", [length(RemainingModules), Module, OutputFile]),
   case cover:analyse_to_file(Module, OutputFile) of
     {ok, OutFile} ->
       io:fwrite("(ok)~n"),
@@ -91,9 +86,9 @@ analyse_to_file(Path, [Module|RemainingModules], Acc) ->
       io:fwrite("(error; ~p)~n", [Reason]),
       Acc2 = Acc
   end,
-  analyse_to_file(Path, RemainingModules, Acc2);
+  analyse_to_file(OutDir, RemainingModules, Acc2);
 
 analyse_to_file(_, [], Acc) ->
   {ok, Acc}.
 
-%[[eof]]
+%%[[eof]]
