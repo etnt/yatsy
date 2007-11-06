@@ -21,7 +21,7 @@
 	 get_finished/0,
 	 yaws_docroot/0, yaws_host/0, yaws_port/0, yaws_listen/0,
 	 l2a/1, a2l/1, i2l/1, n2l/1,
-	 output_dir/0, cc_output_dir/0, get_status/0, 
+	 output_dir/0, cc_output_dir/0, cover_output_dir/0, get_status/0,
 	 run_in_remote_node/0, target_node/0,
 	 config/3, err/1
 	]).
@@ -60,7 +60,10 @@
 	  finished = [],              % list of #app{}
 	  current = false,            % #app{}
 	  queue = [],                 % list of #app{}
-	  target_dir                  % top dir of target code
+	  target_dir,                 % top dir of target code
+	  gen_cover = false,          % Generate code coverage report (takes time!)
+	  cover_output_dir = ".",     % Where to put cruise control output from Yatsy
+	  cover_cbmod = ""            %
 	 }).
 
 
@@ -145,6 +148,9 @@ output_dir() ->
 cc_output_dir() ->
     gen_server:call(?SERVER, cc_output_dir, infinity).
 
+cover_output_dir() ->
+    gen_server:call(?SERVER, cover_output_dir, infinity).
+
 run_in_remote_node() ->
     gen_server:call(?SERVER, run_in_remote_node, infinity).
 
@@ -217,25 +223,46 @@ setup(Config) ->
     Email = get_email(Config, false),
     %%
     TargetNode = l2a(get_target_node(Config)),
+    Config9 = overwrite({yatsy_target_node, TargetNode}, Config8),
     Apps = get_apps(TargetNode, TargetDir),
     ?ilog("****** (TargetNode=~p, TargetDir=~p) Found ~p applications~n", 
 	  [TargetNode, TargetDir, length(Apps)]),
-
-    %%cover_compile(TargetNode, TargetDir),  % FIXME add proper flag
-
-    Config9 = overwrite({yatsy_target_node, TargetNode}, Config8),
+    %%
+    CoverOutDir = get_cover_output_dir(Config),
+    Config10 = overwrite({cover_output_dir, CoverOutDir}, Config9),
+    %%
+    XCoverCallbackMod = get_cover_callback_module(Config),
+    case XCoverCallbackMod of
+      false -> CoverCallbackMod = '';
+      _     -> CoverCallbackMod = list_to_atom(XCoverCallbackMod)
+    end,
+    Config11 = overwrite({cover_cbmod, CoverCallbackMod}, Config10),
+    %%
+    GenCover = l2bool(get_generate_cover(Config)),
+    Config12 = overwrite({gen_cover, GenCover}, Config11),
+    case GenCover of 
+        true when CoverCallbackMod == ''
+		  -> cover_compile(TargetNode, TargetDir);
+        true	  -> cover_compile(TargetNode, TargetDir, CoverCallbackMod);
+	false -> ok
+    end,
+    %%
     #s{top_dir     = TopDir,
        target_dir  = TargetDir,
        output_dir  = OutDir,
        cc_output_dir  = CCOutDir,
+       cover_output_dir = CoverOutDir,
        gen_html    = l2bool(get_generate_html(Config)),
        gen_cc      = l2bool(get_generate_cc(Config)),
-       config      = Config9,
+       gen_cover   = GenCover,
+       cover_cbmod = l2a(XCoverCallbackMod),
+       config      = Config12,
        email       = Email,
        quit        = l2bool(get_quit_when_finished(Config)),
        interactive = Iact,
        target_node = TargetNode,
-       run_in_remote_node = bool_check("run_in_remote_node", l2a(get_run_in_remote_node(Config))),
+       run_in_remote_node = bool_check("run_in_remote_node",
+				       l2a(get_run_in_remote_node(Config))),
        all_apps    = Apps,
        queue       = Apps
       }.
@@ -433,6 +460,9 @@ handle_call(output_dir, _From, State) ->
 %%
 handle_call(cc_output_dir, _From, State) ->
     {reply, {ok, State#s.cc_output_dir}, State};
+%%
+handle_call(cover_output_dir, _From, State) ->
+    {reply, {ok, State#s.cover_output_dir}, State};
 %%
 handle_call(target_node, _From, State) ->
     {reply, {ok, State#s.target_node}, State};
@@ -636,9 +666,12 @@ finished(#s{} = S) ->
     #s{status        = ?YATSY_FINISHED, 
        gen_html      = GenHTML, 
        gen_cc        = GenCC,
+       gen_cover     = GenCover,
        output_dir    = OutDir,
        target_node   = TargetNode,
-       cc_output_dir = CCOutDir} = S,
+       cc_output_dir = CCOutDir,
+       cover_output_dir = CoverOutDir
+      } = S,
     case GenHTML of 
 	true  -> yatsy_rg:gen_html(S#s.finished, OutDir);
 	false -> ok
@@ -647,11 +680,12 @@ finished(#s{} = S) ->
 	true  -> yatsy_rg:gen_cc(S#s.finished, CCOutDir);
 	false -> ok
     end,
+    case GenCover of 
+	true  -> cover_analysis(TargetNode, CoverOutDir);
+	false -> ok
+    end,
     yatsy_rg:ts_is_finished(S#s.quit),
     maybe_sendmail(S),
-
-    %% cover_analysis(TargetNode, OutDir),  % FIXME proper flag test
-
     ?ilog("Yatsy finished!~n", []),
     S.
 
@@ -878,10 +912,15 @@ tc_ok(#tc{name = Name}, [Name|_]) -> true;
 tc_ok(TC, [_|T])                  -> tc_ok(TC, T);
 tc_ok(_, [])                      -> false.
 
-cover_compile(Node, Dir) when Node == node() ->    
+cover_compile(Node, Dir) when Node == node() ->
     yatsy_cover:cover_compile_beams(Dir);
 cover_compile(Node, Dir) ->
     rpc:call(Node, yatsy_cover, cover_compile_beams, [Dir]).
+
+cover_compile(Node, Dir, CallbackMod) when Node == node() ->
+    yatsy_cover:cover_compile_beams(Dir, CallbackMod);
+cover_compile(Node, Dir, CallbackMod) ->
+    rpc:call(Node, yatsy_cover, cover_compile_beams, [Dir, CallbackMod]).
 
 get_apps(Node, Dir) when Node == node() -> 
     get_apps(Dir);
@@ -982,12 +1021,15 @@ get_run_in_remote_node(Config) ->
 get_output_dir(Config) -> 
     get_config_param("YATSY_OUTPUT_DIR", output_dir, Config).
 
+%% FIXME: BUG? "output_dir" below should be "cc_output_dir"?
 get_cc_output_dir(Config) -> 
     get_config_param("YATSY_CC_OUTPUT_DIR", output_dir, Config).
 
+%% FIXME: BUG? "generate_html" below should be "gen_html"?
 get_generate_html(Config) -> 
     get_config_param("YATSY_GENERATE_HTML", generate_html, Config).
 
+%% FIXME: BUG? "generate_cc" below should be "gen_cc"?
 get_generate_cc(Config) -> 
     get_config_param("YATSY_GENERATE_CC", generate_cc, Config).
 
@@ -1012,6 +1054,14 @@ get_test_senario(Config, Default) ->
 get_email(Config, Default) -> 
     get_config_param("YATSY_EMAIL", email, Config, Default).
 
+get_generate_cover(Config) -> 
+    get_config_param("YATSY_GENERATE_COVER", gen_cover, Config).
+
+get_cover_callback_module(Config) ->
+    get_config_param("YATSY_COVER_CALLBACK_MODULE", cover_cbmod, Config).
+
+get_cover_output_dir(Config) -> 
+    get_config_param("YATSY_COVER_OUTPUT_DIR", cover_output_dir, Config).
 
 get_config_param(EnvVar, Key, Config) -> 
     case config(Key, Config) of
