@@ -466,8 +466,13 @@ cc_cases(#suite{finished = Cases, name = SuiteName}) ->
     lists:map(fun(Case) -> cc_case(Case, SuiteName) end, Cases).
 
 cc_case(#tc{name = Name, time = Time} = TC, SuiteName) ->
+    TimeStr = 
+        case Time < 0 of
+            true   -> "0";
+            false  -> f2s(Time/100000)
+        end,
     {testcase, 
-     [{classname, SuiteName}, {name, Name}, {time, f2s(Time/100000)}], 
+     [{classname, SuiteName}, {name, Name}, {time, TimeStr}], 
      cc_msg(TC)}.
 
 cc_msg(#tc{rc  = ok}) -> [];
