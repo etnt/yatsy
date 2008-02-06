@@ -87,7 +87,7 @@ do_suite_init(_Pid, Node, Mod, Fun, Args) ->
 %%%
 suite_fin(Node, Mod, Config) -> 
     Self = self(),
-    spawn(fun() -> do_suite_fin(Self, Node, Mod, fin_per_suite, [Config]) end).
+    spawn(fun() -> do_suite_fin(Self, Node, Mod, end_suite(Mod), [Config]) end).
 
 do_suite_fin(_Pid, Node, Mod, Fun, Args) ->
     case call(Node, Mod, Fun, Args) of
@@ -113,7 +113,7 @@ do_run(_Pid, Node, Mod, #tc{name = Fun}, Config) ->
 		{Time, Res} when Res == true; Res == ok -> 
                     case run_fin(NewConfig) of
                         true -> 
-                            call(Node, Mod, fin_per_testcase, [Fun, NewConfig]);
+                            call(Node, Mod, end_tc(Mod), [Fun, NewConfig]);
                         false ->
                             false
                     end,
@@ -121,7 +121,7 @@ do_run(_Pid, Node, Mod, #tc{name = Fun}, Config) ->
 		Else -> 
                     case run_fin(NewConfig) of
                         true -> 
-                            call(Node, Mod, fin_per_testcase, [Fun, NewConfig]);
+                            call(Node, Mod, end_tc(Mod), [Fun, NewConfig]);
                         false ->
                             false
                     end,
@@ -198,19 +198,12 @@ do_rpc(Iact, Node, Mod, Fun, Args) ->
     %% rpc:call(Node, l2a(Mod), l2a(Fun), Args).
     rpc:call(Node, ?MODULE, local_call, [Iact, l2a(Mod), l2a(Fun), Args]).
 
+end_suite(Mod) -> 
+    Exps = (list_to_atom(Mod)):module_info(exports),
+    [R] = [F || F <- [fin_per_suite,end_per_suite],lists:member({F,1},Exps)],
+    R.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
-
+end_tc(Mod) -> 
+    Exps = (list_to_atom(Mod)):module_info(exports),
+    [R] = [F||F<-[fin_per_testcase,end_per_testcase],lists:member({F,2},Exps)],
+    R.
