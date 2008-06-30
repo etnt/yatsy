@@ -26,6 +26,8 @@
 
 -define(SERVER, ?MODULE).
 
+-define(sec(Time), Time/1000000).
+
 -record(s, {}).
 
 
@@ -460,7 +462,7 @@ cc_artibutes(Suite) ->
      {failures, sum_errors(Suite)}, 
      {name, Suite#suite.name},
      {tests, NoTcs},
-     {time, f2s(Time)}].
+     {time, f2s(?sec(Time))}].
 
 cc_cases(#suite{finished = Cases, name = SuiteName}) ->
     lists:map(fun(Case) -> cc_case(Case, SuiteName) end, Cases).
@@ -468,8 +470,8 @@ cc_cases(#suite{finished = Cases, name = SuiteName}) ->
 cc_case(#tc{name = Name, time = Time} = TC, SuiteName) ->
     TimeStr = 
         case Time < 0 of
-            true   -> "0";
-            false  -> f2s(Time/1000000)
+            true   -> f2s(?sec(0));
+            false  -> f2s(?sec(Time))
         end,
     {testcase, 
      [{classname, SuiteName}, {name, Name}, {time, TimeStr}], 
