@@ -469,7 +469,7 @@ cc_case(#tc{name = Name, time = Time} = TC, SuiteName) ->
     TimeStr = 
         case Time < 0 of
             true   -> "0";
-            false  -> f2s(Time/100000)
+            false  -> f2s(Time/1000000)
         end,
     {testcase, 
      [{classname, SuiteName}, {name, Name}, {time, TimeStr}], 
