@@ -616,9 +616,20 @@ set_suite_init(#s{current = A} = S, {ok, Config})  ->
     Suite = A#app.current,
     S#s{current = A#app{current = Suite#suite{init = true, config = Config}}};
 set_suite_init(#s{current = A} = S, Res)  ->
-    Suite = A#app.current,
     ?ilog("Failed to run ~s:init_per_suite/1, reason: ~p~n", [suite_name(S), Res]),
-    S#s{current = A#app{current = Suite#suite{init = true, config = []}}}.
+    set_suite_init_failed(S#s{current=A},Res).
+%%  Suite = A#app.current,
+%%  S#s{current = A#app{current = Suite#suite{init = true, config = []}}}.
+
+set_suite_init_failed(S = #s{current = A},Res)->
+    F =  A#app.finished,
+    Suite =  A#app.current,
+    TC = #tc{name = init_per_suite, doc = "Init per suite failed",
+	     rc = error, error = Res},
+    Suite2 = Suite#suite{finished = [TC], current = false, init = true, 
+			 fin = true, queue = []},
+    A2 = A#app{finished = [Suite2|F], current = false},
+    S#s{current=A2}.
 
 set_suite_fin(S, ok)  ->
     S;
@@ -637,13 +648,13 @@ set_suite_tc(#s{current = A} = S, _) ->
 set_tc_rc(#s{current = A} = S, {ok, Time}) ->
     Suite = A#app.current,
     TC = (Suite#suite.current)#tc{rc = ok, error = "", time = Time},
-    ?ilog("~p returned ok", [TC#tc.name]),
+    ?ilog("~p returned ok~n", [TC#tc.name]),
     S#s{current = A#app{current = Suite#suite{current = TC}}};
 set_tc_rc(#s{current = A} = S, Else) ->
     Suite = A#app.current,
     TC = Suite#suite.current,
     NewTC = TC#tc{rc = error, error = Else},
-    ?ilog("~p failed", [TC#tc.name]),
+    ?ilog("~p failed~n", [TC#tc.name]),
     S#s{current = A#app{current = Suite#suite{current = NewTC}}}.
 
 app_suite_tc_name(#app{name = A, current = #suite{name = S, current = #tc{name = T}}}) ->
