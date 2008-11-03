@@ -62,7 +62,7 @@ do_suite_doc_and_load(_Pid, Node, Mod0, Fun, Args) ->
 	{_, {module, Mod}} ->
 	    case call(Node, Mod, Fun, Args) of
 		{_, [Str]} when list(Str) -> yatsy_ts:suite_doc_reply({ok, Str});
-		Else                      -> yatsy_ts:suite_doc_reply({error, Else})
+		_ -> yatsy_ts:suite_doc_reply({ok, "NO DOCUMENTATION AVAILABLE"})
 	    end;
 	_ ->
 	    Emsg = "(yatsy) failed to load module: "++a2l(Mod),
