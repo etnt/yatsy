@@ -37,7 +37,7 @@ do_suite_tc(_Pid, Node, Mod, Fun, Args) ->
 	{_, Ts} when list(Ts) -> 
 	    Res = [get_tc_doc(Node, Mod, #tc{name = Tname}) || Tname <- Ts],
 	    yatsy_ts:suite_tc_reply({ok, Res});
-	{yatsy_exit,false,{function_clause,[{Mod2,Fun2,Args2},_,_,_]}}->
+	{yatsy_exit,false,{function_clause,[{_,Fun,Args},_,_,_]}}->
 	    yatsy_ts:suite_tc_reply({ok, []});
 	Else -> 
 	    yatsy_ts:suite_tc_reply({error, Else})
