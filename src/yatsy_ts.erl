@@ -637,10 +637,12 @@ set_suite_fin(S, Res)  ->
     ?ilog("Failed to run ~s:fin_per_suite/1, reason: ~p~n", [suite_name(S), Res]),
     S.
 
+set_suite_tc(#s{current = A} = S, {ok, []})  ->
+    S#s{current = A#app{current = false}};
 set_suite_tc(#s{current = A} = S, {ok, TCs}) when list(TCs)  ->
     Suite = A#app.current,
     S#s{current = A#app{current = Suite#suite{queue = TCs}}};
-set_suite_tc(#s{current = A} = S, _) ->
+set_suite_tc(#s{current = A} = S, Else) ->
     Suite = A#app.current,
     S#s{current = A#app{current = Suite#suite{queue = []}}}.
 
@@ -788,23 +790,25 @@ run_tc(#s{current = #app{current = #suite{name = M, doc = false}}} = S) ->
     {ok, Tref} = timer:send_after(?DEFAULT_TIMEOUT, {timeout_suite_doc, Pid}),
     S#s{pid = Pid, timer_ref = Tref};
 %%
-run_tc(#s{current = #app{current = #suite{name = M, init = false}}} = S) -> 
-    %% Must be the second time we enter this suite, 
-    %% we need to call the init_per_suite/1 function.
-    ?ilog("calling ~s:init_per_suite/1 function...~n", [M]),
-    Pid =  yatsy_tc:suite_init(target_node(S), suite_name(S), S#s.config),
-    {ok, Tref} = timer:send_after(?DEFAULT_TIMEOUT, {timeout_suite_init, Pid}),
-    S#s{pid = Pid, timer_ref = Tref};
-%%
 run_tc(#s{current = #app{current = #suite{name = M, queue = false}}} = S) -> 
-    %% Must be the third time we enter this suite, so we continue by
+    %% Must be the second time we enter this suite, so we continue by
     %% retrieving the Test Case names of the suite.
     ?ilog("retrieving test cases for suite: ~s ...~n", [M]),
-    Sconfig = ((S#s.current)#app.current)#suite.config,
+    Sconfig = S#s.config,
     Pid =  yatsy_tc:suite_tc(target_node(S), suite_name(S), Sconfig),
     {ok, Tref} = timer:send_after(?DEFAULT_TIMEOUT, {timeout_suite_tc, Pid}),
     S#s{pid = Pid, timer_ref = Tref};
 %%
+run_tc(#s{current = #app{current = #suite{name = M, init = false}}} = S) -> 
+    %% Must be the third time we enter this suite, 
+    %% we need to call the init_per_suite/1 function.
+    ?ilog("calling ~s:init_per_suite/1 function...~n", [M]),
+    Sconfig = ((S#s.current)#app.current)#suite.config,
+    Pid =  yatsy_tc:suite_init(target_node(S), suite_name(S), Sconfig),
+    {ok, Tref} = timer:send_after(?DEFAULT_TIMEOUT, {timeout_suite_init, Pid}),
+    S#s{pid = Pid, timer_ref = Tref};
+%%
+
 run_tc(#s{current = #app{current = #suite{name = M, fin = true}}} = S) -> 
     %% Must be the last time we enter this suite, so we 
     %% need to call the fin_per_suite/1
@@ -899,6 +903,8 @@ next_tc(#app{finished = F, current = C, queue = []} = X) ->
     end;
 %%%
 next_tc(#suite{queue = false} = X) -> % no test cases retrieved yet
+    {true, X};
+next_tc(#suite{init = false} = X) -> % init per suite hasn't run yet
     {true, X};
 next_tc(#suite{current = false, queue = [], fin = false} = X) -> % setup M:fin_per_suite/1
     {true, X#suite{fin = true}};
