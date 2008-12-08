@@ -217,8 +217,8 @@ setup(Config) ->
     CCOutDir = get_cc_output_dir(Config),
     Config7 = overwrite({cc_output_dir, CCOutDir}, Config6),
     %%
-    Test = get_test_senario(Config, suite),
-    Config8 = overwrite({test_senario, Test}, Config7),
+    Test = get_test_scenario(Config, suite),
+    Config8 = overwrite({test_scenario, Test}, Config7),
     %%
     Email = get_email(Config, false),
     %%
@@ -1065,8 +1065,8 @@ get_yaws_port(Config, Default) ->
 get_yaws_listen(Config, Default) -> 
     get_config_param("YATSY_YAWS_LISTEN", yaws_listen, Config, Default).
 
-get_test_senario(Config, Default) -> 
-    get_config_param("YATSY_TEST_SENARIO", test_senario, Config, Default).
+get_test_scenario(Config, Default) -> 
+    get_config_param("YATSY_TEST_SCENARIO", test_scenario, Config, Default).
 
 get_email(Config, Default) -> 
     get_config_param("YATSY_EMAIL", email, Config, Default).
