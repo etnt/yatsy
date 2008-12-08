@@ -25,9 +25,9 @@
 %%%
 suite_tc(Node, Mod, Conf) -> 
     Self = self(),
-    {value, {test_senario, Str}} = lists:keysearch(test_senario, 1, Conf),
-    Senario = x_to_atom(Str),
-    spawn(fun() -> do_suite_tc(Self, Node, Mod, all, [Senario]) end).
+    {value, {test_scenario, Str}} = lists:keysearch(test_scenario, 1, Conf),
+    Scenario = x_to_atom(Str),
+    spawn(fun() -> do_suite_tc(Self, Node, Mod, all, [Scenario]) end).
 
 x_to_atom(Str) when is_list(Str) -> list_to_atom(Str);
 x_to_atom(Atom) -> Atom.
