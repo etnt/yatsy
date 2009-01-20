@@ -167,7 +167,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 produce_html_output(Finished, OutDir) ->
     HtmlDir = filename:join([OutDir, "html"]),
-    os:cmd("mkdir "++HtmlDir),
+    os:cmd("mkdir "++HtmlDir), %%??
     mk_top_page(Finished, HtmlDir),
     mk_app_pages(Finished, HtmlDir),
     mk_suite_pages(Finished, HtmlDir),
@@ -176,7 +176,7 @@ produce_html_output(Finished, OutDir) ->
 produce_cc_output(Finished, OutDir) ->
     CCDir = filename:join([OutDir, "cc"]),
     ?ilog("Putting xml output in ~p~n", [CCDir]),
-    os:cmd("mkdir "++CCDir),
+    os:cmd("mkdir "++CCDir), %%??
     cc_output(Finished, CCDir).
     
 mk_top_page(Finished, HtmlDir) -> 
@@ -317,8 +317,7 @@ do_suite(Url, App, Suite, Apps) ->
     end.
 
 %% Float to String
-f2s(F) when float(F)  -> hd(io_lib:format("~.2f", [F]));
-f2s(X) when number(X) -> n2l(X).
+f2s(F) when float(F)  -> hd(io_lib:format("~.2f", [F])).
 
 do_tc(_Url, App, Suite, Tc, Apps) ->
     case get_app(App, Apps) of

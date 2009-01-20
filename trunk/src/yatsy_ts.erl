@@ -62,7 +62,7 @@
 	  queue = [],                 % list of #app{}
 	  target_dir,                 % top dir of target code
 	  gen_cover = false,          % Generate code coverage report (takes time!)
-	  cover_output_dir = ".",     % Where to put cruise control output from Yatsy
+	  cover_output_dir = ".",     % Where to put code coverage output from Yatsy
 	  cover_cbmod = ""            %
 	 }).
 
@@ -642,7 +642,7 @@ set_suite_tc(#s{current = A} = S, {ok, []})  ->
 set_suite_tc(#s{current = A} = S, {ok, TCs}) when list(TCs)  ->
     Suite = A#app.current,
     S#s{current = A#app{current = Suite#suite{queue = TCs}}};
-set_suite_tc(#s{current = A} = S, Else) ->
+set_suite_tc(#s{current = A} = S, _Else) ->
     Suite = A#app.current,
     S#s{current = A#app{current = Suite#suite{queue = []}}}.
 
@@ -658,11 +658,6 @@ set_tc_rc(#s{current = A} = S, Else) ->
     NewTC = TC#tc{rc = error, error = Else},
     ?ilog("~p failed~n", [TC#tc.name]),
     S#s{current = A#app{current = Suite#suite{current = NewTC}}}.
-
-app_suite_tc_name(#app{name = A, current = #suite{name = S, current = #tc{name = T}}}) ->
-    A++"/"++S++"/"++T;
-app_suite_tc_name(_) ->
-    "".
 
 %%%
 %%% The Test Server Engine
@@ -828,8 +823,7 @@ target_node(_)                                                 -> false.
 
 
 run_tc(S, {true, false}) -> exec_tc(S);      % go to next Test Case
-run_tc(S, {true, TC})    -> start_tc(S, TC);
-run_tc(S, _)             -> S#s{status = ?YATSY_ERROR, error = ?EMSG_NO_TC}.
+run_tc(S, {true, TC})    -> start_tc(S, TC).
 
 %%%
 %%% Start running a Test Case. The Timeout is optional.
@@ -850,13 +844,6 @@ suite_name(#s{current = #app{current = #suite{name = Name}}}) -> Name.
 
 state2tc(#s{current = #app{current = #suite{current = TC}}}) -> {true, TC};
 state2tc(_)                                                  -> {true, false}.
-
-state2tc_name(#s{current = #app{current = #suite{current = TC}}}) ->
-    case TC of
-	#tc{name = Name} -> Name;
-	A -> {debug, A}
-    end;
-state2tc_name(Term) -> {debug, Term}.
 
 %%%
 %%%  yatsy_ts:foreach_tc(fun(X) -> io:format("~p~n", [X]) end, yatsy_ts:setup()).
