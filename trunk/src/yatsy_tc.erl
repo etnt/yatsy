@@ -115,11 +115,17 @@ do_run(_Pid, Node, Mod, #tc{name = Fun}, Config) ->
 		{Time, Res} when Res == true; Res == ok -> 
                     case run_fin(NewConfig) of
                         true -> 
-                            call(Node, Mod, end_tc(Mod), [Fun, NewConfig]);
+                            case call(Node, Mod, end_tc(Mod), [Fun, NewConfig]) of
+				{yatsy_exit, Loc, Reason} ->
+				    yatsy_ts:tc_run_reply({yatsy_exit, Loc, Reason});
+				{failed, Loc} ->
+				    yatsy_ts:tc_run_reply({error, {failed, Loc}});
+				Else ->
+				    yatsy_ts:tc_run_reply({ok, Time})
+			    end;
                         false ->
-                            false
-                    end,
-		    yatsy_ts:tc_run_reply({ok, Time});
+			    yatsy_ts:tc_run_reply({ok, Time})
+                    end;
 		Else -> 
                     case run_fin(NewConfig) of
                         true -> 
