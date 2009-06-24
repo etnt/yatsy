@@ -340,6 +340,7 @@ ping(Node, N) when N>0 ->
     end.
 
 wait_started(Node) ->
+    ?ilog("Wating for init:get_status/0 on ~p", [Node]),
     case rpc:call(Node, init, get_status, []) of
 	{started, started} ->
 	    pong;
