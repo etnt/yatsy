@@ -63,10 +63,10 @@ ts_is_finished(Quit) ->
     gen_server:cast(?SERVER, {ts_is_finished, Quit}).
 
 gen_html(Finished, Outdir) ->
-    gen_server:call(?SERVER, {gen_html, Finished, Outdir}).
+    gen_server:call(?SERVER, {gen_html, Finished, Outdir}, infinity).
 
 gen_cc(Finished, Outdir) ->
-    gen_server:call(?SERVER, {gen_cc, Finished, Outdir}).
+    gen_server:call(?SERVER, {gen_cc, Finished, Outdir}, infinity).
 
 
 %%====================================================================
